@@ -1,7 +1,11 @@
 {
   "name": "copy-updater",
-  "description": "",
+  "description": "A Sketch plugin that updates copy based on selected JSON",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lizhengDesign/Sketch-CopyUpdater.git"
+  },
   "engines": {
     "sketch": ">=49.0"
   },
@@ -23,7 +27,7 @@
   "devDependencies": {
     "@skpm/builder": "^0.7.0"
   },
-  "author": "Li Zheng <>",
+  "author": "Li Zheng",
   "dependencies": {
     "@skpm/dialog": "^0.4.0",
     "@skpm/fs": "^0.2.6"
