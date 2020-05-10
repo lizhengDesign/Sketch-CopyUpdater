@@ -23,5 +23,9 @@
   "devDependencies": {
     "@skpm/builder": "^0.7.0"
   },
-  "author": "Li Zheng <>"
+  "author": "Li Zheng <>",
+  "dependencies": {
+    "@skpm/dialog": "^0.4.0",
+    "@skpm/fs": "^0.2.6"
+  }
 }

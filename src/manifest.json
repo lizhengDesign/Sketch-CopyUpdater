@@ -1,17 +1,41 @@
 {
   "$schema": "https://raw.githubusercontent.com/sketch-hq/SketchAPI/develop/docs/sketch-plugin-manifest-schema.json",
+  "name": "Copy Updater",
+  "version": "1.0.0",
+  "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [
     {
-      "name": "my-command",
-      "identifier": "copy-updater.my-command-identifier",
-      "script": "./my-command.js"
+      "name": "Set JSON",
+      "shortcut": "ctrl cmd alt j",
+      "description": "Set a JSON file as copy source",
+      "identifier": "copy-updater.setup",
+      "handler": "setupJSON",
+      "script": "./script.js"
+    },
+    {
+      "name": "Update Copy",
+      "shortcut": "ctrl cmd j",
+      "description": "Update copy with the selected JSON file",
+      "identifier": "copy-updater.update",
+      "handler": "updateCopy",
+      "script": "./script.js"
+    },
+    {
+      "name": "Reset Copy",
+      "shortcut": "ctrl alt j",
+      "description": "Reset copy",
+      "identifier": "copy-updater.reset",
+      "handler": "resetCopy",
+      "script": "./script.js"
     }
   ],
   "menu": {
-    "title": "Copy-Updater",
+    "title": "Copy Updater",
     "items": [
-      "copy-updater.my-command-identifier"
+      "copy-updater.setup",
+      "copy-updater.update",
+      "copy-updater.reset"
     ]
   }
 }
