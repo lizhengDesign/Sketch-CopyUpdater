@@ -1,5 +1,6 @@
 # build artifacts
 copy-updater.sketchplugin
+.zip
 
 # npm
 node_modules
@@ -14,4 +15,5 @@ npm-debug.log
 
 # sketch
 # sketch-assets
+sketch-assets
 .sketch
