@@ -18,6 +18,12 @@
     ],
     "sketch-assets-file": "sketch-assets/icons.sketch"
   },
+  "prettier": {
+    "trailingComma": "es5",
+    "printWidth": 120,
+    "tabWidth": 4,
+    "semi": false
+  },
   "scripts": {
     "build": "skpm-build",
     "watch": "skpm-build --watch",

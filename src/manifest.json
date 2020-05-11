@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/sketch-hq/SketchAPI/develop/docs/sketch-plugin-manifest-schema.json",
   "name": "Copy Updater",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [
@@ -28,6 +28,14 @@
       "identifier": "copy-updater.reset",
       "handler": "resetCopy",
       "script": "./script.js"
+    },
+    {
+      "name": "Check Update",
+      "shortcut": "ctrl shift j",
+      "description": "Check copy udpate",
+      "identifier": "copy-updater.check",
+      "handler": "checkUpdate",
+      "script": "./script.js"
     }
   ],
   "menu": {
@@ -35,7 +43,8 @@
     "items": [
       "copy-updater.setup",
       "copy-updater.update",
-      "copy-updater.reset"
+      "copy-updater.reset",
+      "copy-updater.check"
     ]
   }
 }
