@@ -199,6 +199,7 @@ const createCopyContent = (text, frame, lineBreakMode) => {
     copy.setStringValue(text)
     copy.setFont(NSFont.systemFontOfSize(12))
     copy.setTextColor(NSColor.colorWithCalibratedRed_green_blue_alpha(0, 0, 0, 0.7))
+    copy.setBackgroundColor(NSColor.colorWithCalibratedRed_green_blue_alpha(0, 0, 0, 0))
     copy.setBezeled(false)
     copy.setEditable(false)
     copy.setSelectable(false)
@@ -240,6 +241,7 @@ const createClickableArea = (item, frame) => {
     const unsyncedLayer = doc.getLayerWithID(item.id.split("/")[0])
 
     hotspot.addCursorRect_cursor(hotspot.frame(), NSCursor.pointingHandCursor())
+    // hotspot.setBackgroundColor(NSColor.colorWithCalibratedRed_green_blue_alpha(0, 0, 0, 0.1))
     hotspot.setTransparent(true)
     hotspot.setAction("callAction:")
     hotspot.setCOSJSTargetFunction((sender) => {
@@ -251,10 +253,25 @@ const createClickableArea = (item, frame) => {
     return hotspot
 }
 
-const displayUnsyncedCopy = (item, index, selectedItems) => {
+const displayUnsyncedCopy = (index, resultList, selectedItems) => {
+    const item = resultList[index]
     const unsyncedPosition = compare2Strings(item.sketchCopy, item.dataCopy)
     const startPosition = unsyncedPosition < 60 ? 0 : unsyncedPosition - 60
+    const isFirst = index == 0 || (index > 0 && resultList[index - 1].id != resultList[index].id) ? true : false
+    const isLast =
+        index == resultList.length - 1 ||
+        (index < resultList.length - 1 && resultList[index].id != resultList[index + 1].id)
+            ? true
+            : false
 
+    // const topMargin = isFirst ? panelMargin / 2 : 0
+    // const bottomMargin = isLast ? panelMargin / 2 : 0
+    const topMargin = 0
+    const bottomMargin = 0
+    resultList[index].positionY =
+        index == 0
+            ? topMargin + bottomMargin + panelMargin + itemHeight
+            : topMargin + bottomMargin + panelMargin + itemHeight + resultList[index - 1].positionY
     let contentList = []
     let displayedSketchCopy = [
         item.sketchCopy.slice(0, unsyncedPosition),
@@ -270,10 +287,15 @@ const displayUnsyncedCopy = (item, index, selectedItems) => {
     displayedDataCopy = startPosition == 0 ? displayedDataCopy : "..." + displayedDataCopy
 
     const copySetFrame = createView(
-        NSMakeRect(0, index * (itemHeight + panelMargin), panelWidth, itemHeight + panelMargin)
+        NSMakeRect(
+            0,
+            index == 0 ? 0 : resultList[index - 1].positionY,
+            panelWidth,
+            itemHeight + panelMargin + topMargin + bottomMargin
+        )
     )
     const copySetConetent = createView(
-        NSMakeRect(panelMargin, panelMargin / 2, panelWidth - panelMargin * 2, itemHeight + panelMargin)
+        NSMakeRect(panelMargin, panelMargin / 2 + topMargin, panelWidth - panelMargin * 2, itemHeight)
     )
     const clickableArea = createClickableArea(
         item,
@@ -282,18 +304,14 @@ const displayUnsyncedCopy = (item, index, selectedItems) => {
     contentList = [copySetConetent, clickableArea]
     contentList.forEach((item) => copySetFrame.addSubview(item))
 
-    if (index == 0 || (index > 0 && selectedItems[index - 1].id != selectedItems[index].id)) {
+    if (isFirst) {
+        const topDivider = createDivider(NSMakeRect(0, 0, panelWidth, 1))
         const syncToggle = createToggle(NSMakeRect(0, 0, 36, 36))
+
+        selectedItems[resultList[index].id] = true
         copySetConetent.addSubview(syncToggle)
-        syncToggle.setCOSJSTargetFunction((sender) => {
-            if (!sender.state()) {
-                selectedItems[index] = {}
-            } else {
-                selectedItems[index] = item.layer
-            }
-        })
-    } else {
-        selectedItems[index] = {}
+        copySetFrame.addSubview(topDivider)
+        syncToggle.setCOSJSTargetFunction((sender) => (selectedItems[resultList[index].id] = sender.state()))
     }
 
     const copyLayerName = createCopyContent(
@@ -316,16 +334,15 @@ const displayUnsyncedCopy = (item, index, selectedItems) => {
         NSMakeRect(itemWidth * 2 + panelMargin * 2, 0, itemWidth, itemHeight),
         NSLineBreakByWordWrapping
     )
-    const bottomDivider = createDivider(NSMakeRect(0, itemHeight + panelMargin / 2 - 1, panelWidth, 1))
 
-    contentList = [copyLayerName, copyLabel, sketchCopyContent, dataCopyContent, bottomDivider]
+    contentList = [copyLayerName, copyLabel, sketchCopyContent, dataCopyContent]
     contentList.forEach((item) => copySetConetent.addSubview(item))
 
     return copySetFrame
 }
 
 const displayResult = (resultList) => {
-    let selectedItems = []
+    let selectedItems = {}
     let totalHeight = resultList.length * (itemHeight + panelMargin) + panelMargin * 4
     const panelHeight = totalHeight < maxPanelHeight ? totalHeight : maxPanelHeight
     let dialog = createPopupDialog(
@@ -341,7 +358,7 @@ const displayResult = (resultList) => {
 
     let dialogContent = createView(NSMakeRect(0, 0, panelWidth + scrollBarWidth, panelHeight))
 
-    const layerLabel = createTextLabel("Copy layer", NSMakeRect(panelMargin, panelMargin, itemWidth, panelMargin))
+    const layerLabel = createTextLabel("Unsynced layer", NSMakeRect(panelMargin, panelMargin, itemWidth, panelMargin))
     const sketchCopyLable = createTextLabel(
         "Text in Sketch",
         NSMakeRect(itemWidth + panelMargin * 2, panelMargin, itemWidth, panelMargin)
@@ -357,8 +374,7 @@ const displayResult = (resultList) => {
         NSMakeRect(0, 0, panelWidth, (itemHeight + panelMargin) * resultList.length)
     )
     resultList.forEach((item, index) => {
-        selectedItems.push(item.layer)
-        resultListScrollContent.addSubview(displayUnsyncedCopy(item, index, selectedItems))
+        resultListScrollContent.addSubview(displayUnsyncedCopy(index, resultList, selectedItems))
     })
     resultListScrollView.setDocumentView(resultListScrollContent)
 
@@ -387,9 +403,7 @@ const displayResult = (resultList) => {
 
     updateButton.setCOSJSTargetFunction(function () {
         doc.selectedLayers.clear()
-        selectedItems.forEach((item) => {
-            item.selected = true
-        })
+        Object.keys(selectedItems).forEach((item) => (doc.getLayerWithID(item).selected = selectedItems[item]))
         updateCopy()
         dialog.close()
         fiber.cleanup()
@@ -423,6 +437,7 @@ export const checkUpdate = () => {
                             type: layerType.TEXT,
                             sketchCopy: syncedLayer.text,
                             dataCopy: JSONValue,
+                            positionY: 0,
                         })
                     }
                     break
@@ -434,12 +449,14 @@ export const checkUpdate = () => {
                             if (override.value != JSONValue) {
                                 unsyncedCopyList.push({
                                     layer: syncedLayer,
-                                    id: syncedLayerID + "/" + override.id,
+                                    // id: syncedLayerID + "/" + override.id,
+                                    id: syncedLayerID,
                                     name: syncedLayer.name,
                                     label: copyKey,
                                     type: layerType.SYMBOLINSTANCE,
                                     sketchCopy: override.value,
                                     dataCopy: JSONValue,
+                                    positionY: 0,
                                 })
                             }
                         }
