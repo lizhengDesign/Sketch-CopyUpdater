@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/sketch-hq/SketchAPI/develop/docs/sketch-plugin-manifest-schema.json",
   "name": "Copy Updater",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [
