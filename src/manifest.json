@@ -1,7 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/sketch-hq/SketchAPI/develop/docs/sketch-plugin-manifest-schema.json",
   "name": "Copy Updater",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [
@@ -36,6 +35,23 @@
       "identifier": "copy-updater.check",
       "handler": "checkUpdate",
       "script": "./script.js"
+    },
+    {
+      "name": "Settings",
+      "description": "Settings",
+      "identifier": "copy-updater.settings",
+      "script": "./settings.js"
+    },
+    {
+      "name": "Check Update when Open",
+      "description": "Check copy udpate when a document is open",
+      "script": "./script.js",
+      "identifier": "copy-update.opencheck",
+      "handlers": {
+        "actions": {
+          "OpenDocument": "checkUpdateOnOpenDocument"
+        }
+      }
     }
   ],
   "menu": {
@@ -44,7 +60,9 @@
       "copy-updater.setup",
       "copy-updater.update",
       "copy-updater.reset",
-      "copy-updater.check"
+      "copy-updater.check",
+      "-",
+      "copy-updater.settings"
     ]
   }
 }

@@ -1,13 +1,14 @@
 import dialog from "@skpm/dialog"
 const fs = require("@skpm/fs")
 const sketch = require("sketch")
-const documentID = sketch.getSelectedDocument().id
+const Settings = sketch.Settings
+let doc = sketch.getSelectedDocument()
+let selectedLayers = doc.selectedLayers
+let documentID = sketch.getSelectedDocument().id
 const resourcePath =
     context.scriptPath.stringByDeletingLastPathComponent().stringByDeletingLastPathComponent() + "/Resources/"
-const copyConfigFilePath = resourcePath + "copyConfig.json"
-const copyKeyValuePairPath = resourcePath + documentID + ".json"
-const doc = sketch.getSelectedDocument()
-let selectedLayers = doc.selectedLayers
+let copyConfigFilePath = resourcePath + "copyConfig.json"
+let copyKeyValuePairPath = resourcePath + documentID + ".json"
 const maxPanelHeight = 480
 const panelWidth = 720
 const panelMargin = 20
@@ -15,6 +16,7 @@ const itemWidth = (panelWidth - panelMargin * 4) / 3
 const itemHeight = 60
 const scrollBarWidth = 16
 const layerType = {
+    PAGE: "Page",
     ARTBOARD: "Artboard",
     SHAPEPATH: "ShapePath",
     TEXT: "Text",
@@ -23,6 +25,10 @@ const layerType = {
 const updateType = {
     KEY: false,
     VALUE: true,
+}
+const prefernceKey = {
+    IS_CHECK: "isCheckOnOpenDocument",
+    KEY: "lzhengCopyUpdaterKey",
 }
 const readJSONAsObject = (path) => {
     try {
@@ -39,7 +45,8 @@ const readDatafromConfig = () => {
     const copyJSONPath = storedCopyConfig[documentID]
 
     if (!copyJSONPath) {
-        sketch.UI.message("❌ Please setup a JSON file first")
+        sketch.UI.message("No copy JSON file found")
+        return undefined
     } else {
         const copyData = readJSONAsObject(copyJSONPath)
         if (Object.keys(copyData).length === 0) {
@@ -49,10 +56,14 @@ const readDatafromConfig = () => {
     return undefined
 }
 
+const updateCopyKeyValueConfig = () => {
+    fs.writeFileSync(copyKeyValuePairPath, JSON.stringify(storedCopyKeyValuePair))
+}
+
 const updateCopyConfig = (JSONPath) => {
     storedCopyConfig[documentID] = JSONPath
     fs.writeFileSync(copyConfigFilePath, JSON.stringify(storedCopyConfig))
-    fs.writeFileSync(copyKeyValuePairPath, JSON.stringify(storedCopyKeyValuePair))
+    updateCopyKeyValueConfig()
 }
 
 const resolveValue = (path, data) => {
@@ -62,7 +73,7 @@ const resolveValue = (path, data) => {
 }
 
 const updateTextByType = (type) => {
-    if (selectedLayers.length === 0) {
+    if (selectedLayers.isEmpty) {
         sketch.UI.message("❌ Please select at least 1 layer or artboard.")
         return
     }
@@ -72,13 +83,18 @@ const updateTextByType = (type) => {
 
     let updateCounter = 0
 
-    const getCopyFromData = (id, value) => {
+    const getCopyFromData = (item, index, id, value) => {
         let copyKey
+        let storedKey = Settings.layerSettingForKey(item, prefernceKey.KEY)
+        if (!storedKey) storedKey = {}
+
         if (value[0] == "@") {
             copyKey = value.slice(1)
+            storedKey[index] = copyKey
+            Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
             storedCopyKeyValuePair[id] = copyKey
         } else {
-            copyKey = storedCopyKeyValuePair[id]
+            copyKey = storedKey[index] ? storedKey[index] : storedCopyKeyValuePair[id]
         }
         const copyValue = copyKey ? resolveValue(copyKey, copyData) : undefined
         switch (type) {
@@ -96,12 +112,12 @@ const updateTextByType = (type) => {
         if (layer.layers == undefined) {
             switch (layer.type) {
                 case layerType.TEXT:
-                    layer.text = getCopyFromData(layer.id, layer.text)
+                    layer.text = getCopyFromData(layer, 0, layer.id, layer.text)
                     break
                 case layerType.SYMBOLINSTANCE:
-                    layer.overrides.forEach((override) => {
+                    layer.overrides.forEach((override, index) => {
                         if (override.property == "stringValue" && override.editable) {
-                            override.value = getCopyFromData(layer.id + "/" + override.id, override.value)
+                            override.value = getCopyFromData(layer, index, layer.id + "/" + override.id, override.value)
                         }
                     })
                     if (type == updateType.VALUE) {
@@ -120,7 +136,7 @@ const updateTextByType = (type) => {
     selectedLayers.forEach((layer) => {
         updateChildrenLayers(layer)
     })
-    fs.writeFileSync(copyKeyValuePairPath, JSON.stringify(storedCopyKeyValuePair))
+    updateCopyKeyValueConfig()
     if (type == updateType.KEY) {
         sketch.UI.message("📍 Reset without auto-resizing")
     }
@@ -129,19 +145,27 @@ const updateTextByType = (type) => {
     }
 }
 
+const getLocatedPageID = (layer) => {
+    if (layer.type == layerType.PAGE) {
+        return layer.id
+    } else {
+        return getLocatedPageID(layer.parent)
+    }
+}
+
 const selectOneLayer = (layer) => {
     doc.selectedLayers.clear()
     layer.selected = true
 }
 
-const compare2Strings = (string1, string2) => {
+const getUnsyncedPostion = (string1, string2) => {
     let i = 0
-    while (string1[i] == string2[i] && i < string1.length) {
+    while (i < string1.length && i < string2.length && string1[i] == string2[i]) {
         i++
     }
-
     return i
 }
+
 const createButton = (label, frame) => {
     const button = NSButton.alloc().initWithFrame(frame)
 
@@ -236,7 +260,7 @@ const createPopupDialog = (title, frame) => {
     return panel
 }
 
-const createClickableArea = (layer, frame) => {
+const createClickableArea = (layer, override, frame) => {
     let hotspot = NSButton.alloc().initWithFrame(frame)
 
     hotspot.addCursorRect_cursor(hotspot.frame(), NSCursor.pointingHandCursor())
@@ -244,7 +268,10 @@ const createClickableArea = (layer, frame) => {
     hotspot.setAction("callAction:")
     hotspot.setCOSJSTargetFunction((sender) => {
         sender.setWantsLayer(true)
-        selectOneLayer(layer)
+        if (override) {
+            selectOneLayer(override)
+        } else selectOneLayer(layer)
+        doc.getLayerWithID(getLocatedPageID(layer)).selected = true
         doc.centerOnLayer(layer)
     })
 
@@ -253,22 +280,19 @@ const createClickableArea = (layer, frame) => {
 
 const displayUnsyncedCopy = (layerIndex, copyIndex, unsyncedLayers) => {
     const item = unsyncedLayers[layerIndex]
-    const unsyncedPosition = compare2Strings(item.list[copyIndex].sketchCopy, item.list[copyIndex].dataCopy)
+    const copy = item.list[copyIndex]
+    const unsyncedPosition = getUnsyncedPostion(copy.sketchCopy, copy.dataCopy)
     const startPosition = unsyncedPosition < 60 ? 0 : unsyncedPosition - 60
     let contentList = []
     let displayedSketchCopy = [
-        item.list[copyIndex].sketchCopy.slice(0, unsyncedPosition),
+        copy.sketchCopy.slice(0, unsyncedPosition),
         "🔺",
-        item.list[copyIndex].sketchCopy.slice(unsyncedPosition),
+        copy.sketchCopy.slice(unsyncedPosition),
     ]
         .join("")
         .substr(startPosition)
     displayedSketchCopy = startPosition == 0 ? displayedSketchCopy : "..." + displayedSketchCopy
-    let displayedDataCopy = [
-        item.list[copyIndex].dataCopy.slice(0, unsyncedPosition),
-        "🔺",
-        item.list[copyIndex].dataCopy.slice(unsyncedPosition),
-    ]
+    let displayedDataCopy = [copy.dataCopy.slice(0, unsyncedPosition), "🔺", copy.dataCopy.slice(unsyncedPosition)]
         .join("")
         .substr(startPosition)
     displayedDataCopy = startPosition == 0 ? displayedDataCopy : "..." + displayedDataCopy
@@ -284,6 +308,7 @@ const displayUnsyncedCopy = (layerIndex, copyIndex, unsyncedLayers) => {
     const copySetConetent = createView(NSMakeRect(0, panelMargin / 2, panelWidth - panelMargin * 2, itemHeight))
     const clickableArea = createClickableArea(
         item.layer,
+        item.type == layerType.SYMBOLINSTANCE ? copy.override : false,
         NSMakeRect(0, 0, panelWidth - panelMargin * 2, itemHeight + panelMargin)
     )
 
@@ -296,7 +321,7 @@ const displayUnsyncedCopy = (layerIndex, copyIndex, unsyncedLayers) => {
         NSLineBreakByTruncatingTail
     )
     const copyLabel = createTextLabel(
-        "@" + item.list[copyIndex].label,
+        "@" + copy.label,
         NSMakeRect(panelMargin, panelMargin, itemWidth - panelMargin * 2, itemHeight),
         NSLineBreakByTruncatingTail
     )
@@ -404,72 +429,86 @@ const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
     })
 }
 
+const updateDocumentInfo = (document) => {
+    selectedLayers = document.selectedLayers
+    documentID = document.id
+    copyKeyValuePairPath = resourcePath + documentID + ".json"
+    storedCopyKeyValuePair = readJSONAsObject(copyKeyValuePairPath)
+}
+
+export const checkUpdateOnOpenDocument = (context) => {
+    if (!Settings.settingForKey(prefernceKey.IS_CHECK)) return
+    setTimeout(() => {
+        doc = sketch.fromNative(context.actionContext.document)
+        updateDocumentInfo(doc)
+        checkUpdate()
+    }, 1000)
+}
+
 export const checkUpdate = () => {
     const copyData = readDatafromConfig()
     if (!copyData) return
 
-    let copyLayers = {}
     let unsyncedLayers = []
     let unsyncedCopyAmount = 0
 
-    Object.keys(storedCopyKeyValuePair).forEach((copyID) => {
-        copyLayers[copyID.split("/")[0]] = { isSynced: true, list: [] }
-    })
+    const createUnsyncedData = (layer, type, list) => {
+        return {
+            id: layer.id,
+            name: layer.name,
+            layer: layer,
+            type: type,
+            selected: true,
+            list: list,
+        }
+    }
 
-    Object.keys(copyLayers).forEach((layerID) => {
-        const syncedLayer = doc.getLayerWithID(layerID)
-        if (syncedLayer) {
-            switch (syncedLayer.type) {
+    const checkChildrenLayers = (layer) => {
+        if (layer.layers == undefined) {
+            let storedKey = Settings.layerSettingForKey(layer, prefernceKey.KEY)
+            if (!storedKey) return
+            switch (layer.type) {
                 case layerType.TEXT:
-                    const copyKey = storedCopyKeyValuePair[layerID]
+                    const copyKey = storedKey[0]
                     const JSONValue = resolveValue(copyKey, copyData)
-                    if (syncedLayer.text != JSONValue) {
-                        copyLayers[layerID].isSynced = false
-                        copyLayers[layerID].layer = syncedLayer
-                        copyLayers[layerID].name = syncedLayer.name
-                        copyLayers[layerID].type = layerType.TEXT
-                        copyLayers[layerID].list.push({
-                            label: copyKey,
-                            sketchCopy: syncedLayer.text,
-                            dataCopy: JSONValue,
-                        })
+                    if (layer.text != JSONValue) {
+                        unsyncedLayers.push(
+                            createUnsyncedData(layer, layerType.TEXT, [
+                                { label: copyKey, sketchCopy: layer.text, dataCopy: JSONValue },
+                            ])
+                        )
+                        unsyncedCopyAmount++
                     }
                     break
                 case layerType.SYMBOLINSTANCE:
-                    syncedLayer.overrides.forEach((override) => {
-                        const copyKey = storedCopyKeyValuePair[layerID + "/" + override.id]
+                    let unsyncedOverride = []
+                    layer.overrides.forEach((override, index) => {
+                        const copyKey = storedKey[index]
                         if (copyKey && override.property == "stringValue" && override.editable) {
                             const JSONValue = resolveValue(copyKey, copyData)
                             if (override.value != JSONValue) {
-                                copyLayers[layerID].isSynced = false
-                                copyLayers[layerID].layer = syncedLayer
-                                copyLayers[layerID].name = syncedLayer.name
-                                copyLayers[layerID].type = layerType.SYMBOLINSTANCE
-                                copyLayers[layerID].list.push({
+                                unsyncedOverride.push({
                                     label: copyKey,
                                     sketchCopy: override.value,
                                     dataCopy: JSONValue,
+                                    override: override,
                                 })
+                                unsyncedCopyAmount++
                             }
                         }
                     })
+                    if (unsyncedOverride.length != 0) {
+                        unsyncedLayers.push(createUnsyncedData(layer, layerType.SYMBOLINSTANCE, unsyncedOverride))
+                    }
                     break
             }
-        }
+        } else layer.layers.forEach((sublayer) => checkChildrenLayers(sublayer))
+    }
+
+    doc.pages.forEach((page) => {
+        checkChildrenLayers(page)
     })
-    Object.keys(copyLayers).forEach((layerID) => {
-        if (!copyLayers[layerID].isSynced) {
-            unsyncedCopyAmount += copyLayers[layerID].list.length
-            unsyncedLayers.push({
-                id: layerID,
-                selected: true,
-                name: copyLayers[layerID].name,
-                layer: copyLayers[layerID].layer,
-                type: copyLayers[layerID].type,
-                list: copyLayers[layerID].list,
-            })
-        }
-    })
+
     if (unsyncedLayers.length !== 0) {
         displayResult(unsyncedLayers, unsyncedCopyAmount)
     } else {
