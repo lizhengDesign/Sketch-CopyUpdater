@@ -13,6 +13,7 @@ A Sketch plugin that updates copy based on selected JSON
 ### Add key
 
 Use @ to assign a key
+
 The corresponding value will be retrieved after an update.
 
 ```
@@ -23,6 +24,7 @@ For symbol and nested symbol: use @your_key as its override value
 ### Remove key
 
 use -@ to remove a key
+
 The new_value will be used as its text and the old @your_key will be removed.
 
 ```
