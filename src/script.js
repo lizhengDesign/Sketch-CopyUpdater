@@ -4,11 +4,6 @@ const sketch = require("sketch")
 const Settings = sketch.Settings
 let doc = sketch.getSelectedDocument()
 let selectedLayers = doc.selectedLayers
-let documentID = sketch.getSelectedDocument().id
-const resourcePath =
-    context.scriptPath.stringByDeletingLastPathComponent().stringByDeletingLastPathComponent() + "/Resources/"
-let copyConfigFilePath = resourcePath + "copyConfig.json"
-let copyKeyValuePairPath = resourcePath + documentID + ".json"
 const maxPanelHeight = 480
 const panelWidth = 720
 const panelMargin = 20
@@ -28,6 +23,7 @@ const updateType = {
 }
 const prefernceKey = {
     IS_CHECK: "isCheckOnOpenDocument",
+    CHECK_SCOPE: "copyCheckScope",
     KEY: "lzhengCopyUpdaterKey",
 }
 const readJSONAsObject = (path) => {
@@ -38,11 +34,9 @@ const readJSONAsObject = (path) => {
         return {}
     }
 }
-let storedCopyConfig = readJSONAsObject(copyConfigFilePath)
-let storedCopyKeyValuePair = readJSONAsObject(copyKeyValuePairPath)
 
 const readDatafromConfig = () => {
-    const copyJSONPath = storedCopyConfig[documentID]
+    const copyJSONPath = Settings.documentSettingForKey(doc, prefernceKey.KEY)
 
     if (!copyJSONPath) {
         sketch.UI.message("No copy JSON file found")
@@ -56,20 +50,13 @@ const readDatafromConfig = () => {
     return undefined
 }
 
-const updateCopyKeyValueConfig = () => {
-    fs.writeFileSync(copyKeyValuePairPath, JSON.stringify(storedCopyKeyValuePair))
-}
-
-const updateCopyConfig = (JSONPath) => {
-    storedCopyConfig[documentID] = JSONPath
-    fs.writeFileSync(copyConfigFilePath, JSON.stringify(storedCopyConfig))
-    updateCopyKeyValueConfig()
-}
-
 const resolveValue = (path, data) => {
-    return path.split(".").reduce((prev, curr) => {
+    let copyValue = path.split(".").reduce((prev, curr) => {
         return prev ? prev[curr] : null
     }, data || self)
+    if (typeof copyValue != "string") {
+        return undefined
+    } else return copyValue
 }
 
 const updateTextByType = (type) => {
@@ -83,28 +70,38 @@ const updateTextByType = (type) => {
 
     let updateCounter = 0
 
-    const getCopyFromData = (item, index, id, value) => {
+    const getCopyFromData = (item, index, value) => {
         let copyKey
         let storedKey = Settings.layerSettingForKey(item, prefernceKey.KEY)
+        let displayValue = value
         if (!storedKey) storedKey = {}
 
-        if (value[0] == "@") {
-            copyKey = value.slice(1)
-            storedKey[index] = copyKey
-            Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
-            storedCopyKeyValuePair[id] = copyKey
-        } else {
-            copyKey = storedKey[index] ? storedKey[index] : storedCopyKeyValuePair[id]
+        switch (value[0]) {
+            case "@":
+                copyKey = value.slice(1)
+                storedKey[index] = copyKey
+                Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
+                break
+            case "-":
+                if (value[1] == "@") {
+                    copyKey = undefined
+                    storedKey[index] = copyKey
+                    displayValue = value.slice(2)
+                    Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
+                } else copyKey = storedKey[index]
+                break
+            default:
+                copyKey = storedKey[index]
         }
-        const copyValue = copyKey ? resolveValue(copyKey, copyData) : undefined
         switch (type) {
             case updateType.KEY:
-                return copyKey ? "@" + copyKey : value
+                return copyKey ? "@" + copyKey : displayValue
             case updateType.VALUE:
-                if (copyValue && copyValue != value) {
+                const copyValue = copyKey ? resolveValue(copyKey, copyData) : undefined
+                if (copyValue && copyValue != displayValue) {
                     updateCounter++
                     return copyValue
-                } else return value
+                } else return displayValue
         }
     }
 
@@ -112,12 +109,12 @@ const updateTextByType = (type) => {
         if (layer.layers == undefined) {
             switch (layer.type) {
                 case layerType.TEXT:
-                    layer.text = getCopyFromData(layer, 0, layer.id, layer.text)
+                    layer.text = getCopyFromData(layer, 0, layer.text)
                     break
                 case layerType.SYMBOLINSTANCE:
                     layer.overrides.forEach((override, index) => {
                         if (override.property == "stringValue" && override.editable) {
-                            override.value = getCopyFromData(layer, index, layer.id + "/" + override.id, override.value)
+                            override.value = getCopyFromData(layer, index, override.value)
                         }
                     })
                     if (type == updateType.VALUE) {
@@ -136,7 +133,6 @@ const updateTextByType = (type) => {
     selectedLayers.forEach((layer) => {
         updateChildrenLayers(layer)
     })
-    updateCopyKeyValueConfig()
     if (type == updateType.KEY) {
         sketch.UI.message("📍 Reset without auto-resizing")
     }
@@ -429,18 +425,11 @@ const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
     })
 }
 
-const updateDocumentInfo = (document) => {
-    selectedLayers = document.selectedLayers
-    documentID = document.id
-    copyKeyValuePairPath = resourcePath + documentID + ".json"
-    storedCopyKeyValuePair = readJSONAsObject(copyKeyValuePairPath)
-}
-
 export const checkUpdateOnOpenDocument = (context) => {
     if (!Settings.settingForKey(prefernceKey.IS_CHECK)) return
     setTimeout(() => {
         doc = sketch.fromNative(context.actionContext.document)
-        updateDocumentInfo(doc)
+        selectedLayers = doc.selectedLayers
         checkUpdate()
     }, 1000)
 }
@@ -471,7 +460,7 @@ export const checkUpdate = () => {
                 case layerType.TEXT:
                     const copyKey = storedKey[0]
                     const JSONValue = resolveValue(copyKey, copyData)
-                    if (layer.text != JSONValue) {
+                    if (JSONValue && layer.text != JSONValue) {
                         unsyncedLayers.push(
                             createUnsyncedData(layer, layerType.TEXT, [
                                 { label: copyKey, sketchCopy: layer.text, dataCopy: JSONValue },
@@ -486,7 +475,7 @@ export const checkUpdate = () => {
                         const copyKey = storedKey[index]
                         if (copyKey && override.property == "stringValue" && override.editable) {
                             const JSONValue = resolveValue(copyKey, copyData)
-                            if (override.value != JSONValue) {
+                            if (JSONValue && override.value != JSONValue) {
                                 unsyncedOverride.push({
                                     label: copyKey,
                                     sketchCopy: override.value,
@@ -504,10 +493,27 @@ export const checkUpdate = () => {
             }
         } else layer.layers.forEach((sublayer) => checkChildrenLayers(sublayer))
     }
-
-    doc.pages.forEach((page) => {
-        checkChildrenLayers(page)
-    })
+    let checkScope = Settings.settingForKey(prefernceKey.CHECK_SCOPE)
+        ? Settings.settingForKey(prefernceKey.CHECK_SCOPE)
+        : 0
+    switch (checkScope) {
+        case 0: // Selected page
+            doc.pages.forEach((page) => {
+                if (page.selected) checkChildrenLayers(page)
+            })
+            break
+        case 1: // Pages starting with "@"
+            doc.pages.forEach((page) => {
+                if (page.name[0] == "@") checkChildrenLayers(page)
+            })
+            break
+        case 2: // Entire document
+            doc.pages.forEach((page) => {
+                checkChildrenLayers(page)
+            })
+            break
+        default:
+    }
 
     if (unsyncedLayers.length !== 0) {
         displayResult(unsyncedLayers, unsyncedCopyAmount)
@@ -531,6 +537,6 @@ export const setupJSON = () => {
     })
     const sourceFilePath = selectedFile[0]
     if (sourceFilePath) {
-        updateCopyConfig(sourceFilePath)
+        Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
     }
 }
