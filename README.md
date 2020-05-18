@@ -10,9 +10,19 @@ A Sketch plugin that updates copy based on selected JSON
 
 ## How to use
 
-For text: use @your_key as content
+### Use @ to assign a key
 
+For text: use @your_key as content
 For symbol and nested symbol: use @your_key as its override value
+
+The corresponding value will be retrieved after an update.
+
+### use -@ to remove a key
+
+For text: use -@new_value as content
+For symbol and nested symbol: use -@new_value as its override value
+
+The new_value will be used as the text and the old your_key will be removed
 
 ### Examples:
 
