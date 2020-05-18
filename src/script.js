@@ -141,14 +141,6 @@ const updateTextByType = (type) => {
     }
 }
 
-const getLocatedPageID = (layer) => {
-    if (layer.type == layerType.PAGE) {
-        return layer.id
-    } else {
-        return getLocatedPageID(layer.parent)
-    }
-}
-
 const selectOneLayer = (layer) => {
     doc.selectedLayers.clear()
     layer.selected = true
@@ -267,7 +259,7 @@ const createClickableArea = (layer, override, frame) => {
         if (override) {
             selectOneLayer(override)
         } else selectOneLayer(layer)
-        doc.getLayerWithID(getLocatedPageID(layer)).selected = true
+        layer.getParentPage().selected = true
         doc.centerOnLayer(layer)
     })
 
