@@ -5,9 +5,9 @@ const Settings = sketch.Settings
 let doc = sketch.getSelectedDocument()
 let selectedLayers = doc.selectedLayers
 const maxPanelHeight = 480
-const panelWidth = 720
 const panelMargin = 20
-const itemWidth = (panelWidth - panelMargin * 4) / 3
+const itemWidth = 200
+const panelWidth = itemWidth * 3 + panelMargin * 6
 const itemHeight = 60
 const scrollBarWidth = 16
 const layerType = {
@@ -18,13 +18,21 @@ const layerType = {
     SYMBOLINSTANCE: "SymbolInstance",
 }
 const updateType = {
-    KEY: false,
-    VALUE: true,
+    KEY: 0,
+    FROM_JSON: 1,
+    TO_JSON: 2,
+    MIXED: 3,
+}
+const updateDirection = {
+    TO_JSON: true,
+    FROM_JSON: false,
 }
 const prefernceKey = {
     IS_CHECK: "isCheckOnOpenDocument",
+    HAS_DOCUMENTATION: "hasCopyDocumentation",
     CHECK_SCOPE: "copyCheckScope",
     KEY: "lzhengCopyUpdaterKey",
+    UPDATE_DIRECTION: "lzhengCopyUpdaterDirection",
 }
 const readJSONAsObject = (path) => {
     try {
@@ -51,6 +59,7 @@ const readDatafromConfig = () => {
 }
 
 const resolveValue = (path, data) => {
+    if (!path) return undefined
     let copyValue = path.split(".").reduce((prev, curr) => {
         return prev ? prev[curr] : null
     }, data || self)
@@ -59,65 +68,117 @@ const resolveValue = (path, data) => {
     } else return copyValue
 }
 
+const setValue = (path, data, value) => {
+    let pathList = path.split(".")
+    pathList.reduce((prev, curr, index) => {
+        if (index == pathList.length - 1) {
+            prev[curr] = value
+        }
+        return prev ? prev[curr] : null
+    }, data || self)
+}
+
+const updateText = (layer, value) => {
+    if (layer.type == layerType.TEXT) {
+        layer.text = value
+    } else layer.value = value
+}
+
 const updateTextByType = (type) => {
     if (selectedLayers.isEmpty) {
         sketch.UI.message("❌ Please select at least 1 layer or artboard.")
         return
     }
 
-    const copyData = readDatafromConfig()
+    let copyData = readDatafromConfig()
     if (!copyData) return
 
     let updateCounter = 0
 
-    const getCopyFromData = (item, index, value) => {
+    const updateCopyBasedOnDirection = (item, index, direction, itemType) => {
         let copyKey
         let storedKey = Settings.layerSettingForKey(item, prefernceKey.KEY)
-        let displayValue = value
+        let copyItem = itemType == layerType.TEXT ? item : item.overrides[index]
+        let onDisplayValue = itemType == layerType.TEXT ? item.text : copyItem.value
         if (!storedKey) storedKey = {}
 
-        switch (value[0]) {
+        switch (onDisplayValue[0]) {
             case "@":
-                copyKey = value.slice(1)
+                copyKey = onDisplayValue.slice(1)
                 storedKey[index] = copyKey
                 Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
                 break
             case "-":
-                if (value[1] == "@") {
+                if (onDisplayValue[1] == "@") {
+                    onDisplayValue = onDisplayValue.slice(2)
                     copyKey = undefined
                     storedKey[index] = copyKey
-                    displayValue = value.slice(2)
                     Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
                 } else copyKey = storedKey[index]
                 break
             default:
                 copyKey = storedKey[index]
         }
+
+        const JSONValue = copyKey ? resolveValue(copyKey, copyData) : undefined
+
+        const syncCopyFromJSON = () => {
+            if (JSONValue && JSONValue != onDisplayValue) {
+                updateCounter++
+                updateText(copyItem, JSONValue)
+            } else updateText(copyItem, onDisplayValue)
+        }
+
+        const syncCopyToJSON = () => {
+            if (JSONValue != onDisplayValue) {
+                updateCounter++
+                if (!copyKey) {
+                    copyKey =
+                        item == copyItem
+                            ? item.name.replace(/\s/g, "")
+                            : item.name.replace(/\s/g, "") + "-" + copyItem.affectedLayer.name.replace(/\s/g, "")
+                    copyKey = resolveValue(copyKey, copyData) ? `${copyKey}-id:${copyItem.id}` : copyKey
+                    storedKey[index] = copyKey
+                    Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
+                }
+                setValue(copyKey, copyData, onDisplayValue)
+            }
+        }
+
         switch (type) {
             case updateType.KEY:
-                return copyKey ? "@" + copyKey : displayValue
-            case updateType.VALUE:
-                const copyValue = copyKey ? resolveValue(copyKey, copyData) : undefined
-                if (copyValue && copyValue != displayValue) {
-                    updateCounter++
-                    return copyValue
-                } else return displayValue
+                updateText(copyItem, copyKey ? "@" + copyKey : onDisplayValue)
+                break
+            case updateType.FROM_JSON:
+                syncCopyFromJSON()
+                break
+            case updateType.TO_JSON:
+                syncCopyToJSON()
+                break
+            case updateType.MIXED:
+                if (direction == updateDirection.FROM_JSON) syncCopyFromJSON()
+                else syncCopyToJSON()
+                break
         }
     }
 
     const updateChildrenLayers = (layer) => {
         if (layer.layers == undefined) {
+            let directions = Settings.layerSettingForKey(layer, prefernceKey.UPDATE_DIRECTION)
+            if (!directions) directions = []
             switch (layer.type) {
                 case layerType.TEXT:
-                    layer.text = getCopyFromData(layer, 0, layer.text)
+                    let direction = directions[0] ? directions[0] : updateDirection.FROM_JSON
+                    updateCopyBasedOnDirection(layer, 0, direction, layerType.TEXT)
                     break
                 case layerType.SYMBOLINSTANCE:
                     layer.overrides.forEach((override, index) => {
                         if (override.property == "stringValue" && override.editable) {
-                            override.value = getCopyFromData(layer, index, override.value)
+                            let direction = directions[index] ? directions[index] : updateDirection.FROM_JSON
+                            updateCopyBasedOnDirection(layer, index, direction, layerType.SYMBOLINSTANCE)
                         }
                     })
-                    if (type == updateType.VALUE) {
+                    if (type != updateType.KEY) {
                         layer.resizeWithSmartLayout()
                     }
                     break
@@ -133,11 +194,22 @@ const updateTextByType = (type) => {
     selectedLayers.forEach((layer) => {
         updateChildrenLayers(layer)
     })
-    if (type == updateType.KEY) {
-        sketch.UI.message("📍 Reset without auto-resizing")
-    }
-    if (type == updateType.VALUE) {
-        sketch.UI.message(`🙌 ${updateCounter} text(s) updated`)
+
+    switch (type) {
+        case updateType.KEY:
+            sketch.UI.message("📍 Reset without auto-resizing")
+            break
+        case updateType.FROM_JSON:
+            sketch.UI.message(`🙌 ${updateCounter} text(s) updated`)
+            break
+        case updateType.TO_JSON:
+            fs.writeFileSync(Settings.documentSettingForKey(doc, prefernceKey.KEY), JSON.stringify(copyData))
+            sketch.UI.message(`🙌 ${updateCounter} text(s) exported`)
+            break
+        case updateType.MIXED:
+            fs.writeFileSync(Settings.documentSettingForKey(doc, prefernceKey.KEY), JSON.stringify(copyData))
+            sketch.UI.message(`🙌 ${updateCounter} text(s) synced`)
+            break
     }
 }
 
@@ -211,13 +283,41 @@ const createCopyContent = (text, frame, lineBreakMode) => {
     copy.setStringValue(text)
     copy.setFont(NSFont.systemFontOfSize(12))
     copy.setTextColor(NSColor.colorWithCalibratedRed_green_blue_alpha(0, 0, 0, 0.7))
-    copy.setBackgroundColor(NSColor.colorWithCalibratedRed_green_blue_alpha(0, 0, 0, 0))
     copy.setBezeled(false)
     copy.setEditable(false)
     copy.setSelectable(false)
     copy.setLineBreakMode(lineBreakMode)
 
     return copy
+}
+
+const createArrowBTN = (layer, index, frame) => {
+    const icon = NSButton.alloc().initWithFrame(frame)
+    let direction = Settings.layerSettingForKey(layer, prefernceKey.UPDATE_DIRECTION)
+    if (!direction) direction = []
+    direction[index] = updateDirection.FROM_JSON
+    Settings.setLayerSettingForKey(layer, prefernceKey.UPDATE_DIRECTION, direction)
+
+    icon.addCursorRect_cursor(icon.frame(), NSCursor.pointingHandCursor())
+    icon.setTitle("←")
+    icon.setFont(NSFont.systemFontOfSize(16))
+    icon.setBezelStyle(NSRegularSquareBezelStyle)
+    icon.setAction("callAction:")
+    icon.setCOSJSTargetFunction((sender) => {
+        sender.setWantsLayer(true)
+        direction = Settings.layerSettingForKey(layer, prefernceKey.UPDATE_DIRECTION)
+        if (icon.state()) {
+            direction[index] = updateDirection.TO_JSON
+            Settings.setDocumentSettingForKey(doc, prefernceKey.UPDATE_DIRECTION, updateType.MIXED)
+            icon.setTitle("→")
+        } else {
+            direction[index] = updateDirection.FROM_JSON
+            icon.setTitle("←")
+        }
+        Settings.setLayerSettingForKey(layer, prefernceKey.UPDATE_DIRECTION, direction)
+    })
+
+    return icon
 }
 
 const createScrollView = (frame) => {
@@ -249,7 +349,7 @@ const createPopupDialog = (title, frame) => {
 }
 
 const createClickableArea = (layer, override, frame) => {
-    let hotspot = NSButton.alloc().initWithFrame(frame)
+    const hotspot = NSButton.alloc().initWithFrame(frame)
 
     hotspot.addCursorRect_cursor(hotspot.frame(), NSCursor.pointingHandCursor())
     hotspot.setTransparent(true)
@@ -299,14 +399,21 @@ const displayUnsyncedCopy = (layerIndex, copyIndex, unsyncedLayers) => {
         item.type == layerType.SYMBOLINSTANCE ? copy.override : false,
         NSMakeRect(0, 0, panelWidth - panelMargin * 2, itemHeight + panelMargin)
     )
+    const syncDirectionIcon = createArrowBTN(
+        item.layer,
+        copy.index,
+        NSMakeRect(itemWidth * 2 + panelMargin * 0.5, panelMargin * 0.5, panelMargin * 2, panelMargin * 2)
+    )
 
-    contentList = [copySetConetent, clickableArea]
+    contentList = [copySetConetent, clickableArea, syncDirectionIcon]
     contentList.forEach((item) => copySetFrame.addSubview(item))
 
     const copyLayerName = createCopyContent(
         item.name,
         NSMakeRect(panelMargin, 0, itemWidth - panelMargin * 2, itemHeight),
-        NSLineBreakByTruncatingTail
+        NSLineBreakByTruncatingTail,
+        NSColor.colorWithCalibratedRed_green_blue_alpha(0, 0, 0, 0.7),
+        0.1
     )
     const copyLabel = createTextLabel(
         "@" + copy.label,
@@ -318,16 +425,20 @@ const displayUnsyncedCopy = (layerIndex, copyIndex, unsyncedLayers) => {
         NSMakeRect(itemWidth, 0, itemWidth, itemHeight),
         NSLineBreakByWordWrapping
     )
+
     const dataCopyContent = createCopyContent(
         displayedDataCopy,
-        NSMakeRect(itemWidth * 2 + panelMargin, 0, itemWidth, itemHeight),
+        NSMakeRect(itemWidth * 2 + panelMargin * 3, 0, itemWidth, itemHeight),
         NSLineBreakByWordWrapping
     )
 
     contentList = [copyLayerName, copyLabel, sketchCopyContent, dataCopyContent]
     contentList.forEach((item) => copySetConetent.addSubview(item))
 
-    return copySetFrame
+    return {
+        block: copySetFrame,
+        direction: syncDirectionIcon,
+    }
 }
 
 const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
@@ -345,6 +456,7 @@ const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
         dialog.close()
         fiber.cleanup()
     })
+    Settings.setDocumentSettingForKey(doc, prefernceKey.UPDATE_DIRECTION, updateType.FROM_JSON)
 
     let dialogContent = createView(NSMakeRect(0, 0, panelWidth + scrollBarWidth, panelHeight))
 
@@ -355,7 +467,7 @@ const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
     )
     const dataCopyLabel = createTextLabel(
         "Text in JSON",
-        NSMakeRect(itemWidth * 2 + panelMargin * 3, panelMargin, itemWidth, panelMargin)
+        NSMakeRect(itemWidth * 2 + panelMargin * 5, panelMargin, itemWidth, panelMargin)
     )
     const resultListScrollView = createScrollView(
         NSMakeRect(0, panelMargin * 2, panelWidth + scrollBarWidth, panelHeight - panelMargin * 4)
@@ -372,15 +484,20 @@ const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
         )
         const topDivider = createDivider(NSMakeRect(0, 0, panelWidth, 1))
         const syncToggle = createToggle(NSMakeRect(panelMargin, panelMargin, 36, 36))
-
-        layerFrame.addSubview(syncToggle)
-        layerFrame.addSubview(topDivider)
-        syncToggle.setCOSJSTargetFunction((sender) => (item.selected = sender.state()))
-        resultListScrollContent.addSubview(layerFrame)
-
+        let unSyncedCopySets = [topDivider, syncToggle]
+        let syncDirectionSets = []
         item.list.forEach((copy, j) => {
-            layerFrame.addSubview(displayUnsyncedCopy(i, j, unsyncedLayers))
+            const copySet = displayUnsyncedCopy(i, j, unsyncedLayers)
+            unSyncedCopySets.push(copySet.block)
+            syncDirectionSets.push(copySet.direction)
         })
+
+        syncToggle.setCOSJSTargetFunction((sender) => {
+            item.selected = sender.state()
+            syncDirectionSets.forEach((direction) => direction.setEnabled(sender.state()))
+        })
+        unSyncedCopySets.forEach((copySet) => layerFrame.addSubview(copySet))
+        resultListScrollContent.addSubview(layerFrame)
         prevCopyAmount += item.list.length
     })
     resultListScrollView.setDocumentView(resultListScrollContent)
@@ -411,7 +528,7 @@ const displayResult = (unsyncedLayers, unsyncedCopyAmount) => {
     updateButton.setCOSJSTargetFunction(function () {
         doc.selectedLayers.clear()
         unsyncedLayers.forEach((item) => (item.layer.selected = item.selected))
-        updateCopy()
+        updateTextByType(Settings.documentSettingForKey(doc, prefernceKey.UPDATE_DIRECTION))
         dialog.close()
         fiber.cleanup()
     })
@@ -455,7 +572,12 @@ export const checkUpdate = () => {
                     if (JSONValue && layer.text != JSONValue) {
                         unsyncedLayers.push(
                             createUnsyncedData(layer, layerType.TEXT, [
-                                { label: copyKey, sketchCopy: layer.text, dataCopy: JSONValue },
+                                {
+                                    label: copyKey,
+                                    sketchCopy: layer.text,
+                                    dataCopy: JSONValue,
+                                    index: 0,
+                                },
                             ])
                         )
                         unsyncedCopyAmount++
@@ -473,6 +595,7 @@ export const checkUpdate = () => {
                                     sketchCopy: override.value,
                                     dataCopy: JSONValue,
                                     override: override,
+                                    index: index,
                                 })
                                 unsyncedCopyAmount++
                             }
@@ -518,17 +641,30 @@ export const resetCopy = () => {
     updateTextByType(updateType.KEY)
 }
 
-export const updateCopy = () => {
-    updateTextByType(updateType.VALUE)
+export const pullCopy = () => {
+    updateTextByType(updateType.FROM_JSON)
+}
+
+export const pushCopy = () => {
+    updateTextByType(updateType.TO_JSON)
+}
+
+export const generateJSON = () => {
+    const sourceFilePath = dialog.showSaveDialogSync(doc, {})
+    if (sourceFilePath) {
+        Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
+        const initData = {}
+        initData[doc.id] = "Generated by Copy-Updater"
+        fs.writeFileSync(sourceFilePath, JSON.stringify(initData))
+        updateTextByType(updateType.TO_JSON)
+    }
 }
 
 export const setupJSON = () => {
-    const selectedFile = dialog.showOpenDialogSync({
+    const selectedFile = dialog.showOpenDialogSync(doc, {
         properties: ["openFile"],
         filters: [{ extensions: ["json"] }],
     })
     const sourceFilePath = selectedFile[0]
-    if (sourceFilePath) {
-        Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
-    }
+    if (sourceFilePath) Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
 }

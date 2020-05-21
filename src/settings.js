@@ -7,16 +7,17 @@ const responseOptions = {
 }
 const prefernceKey = {
     IS_CHECK: "isCheckOnOpenDocument",
+    HAS_DOCUMENTATION: "hasCopyDocumentation",
     CHECK_SCOPE: "copyCheckScope",
 }
 const panelSpec = {
     width: 300,
-    height: 130,
+    height: 150,
     lineHeight: 25,
 }
 const checkScopeOptions = ["Selected page", 'Pages starting with "@"', "Entire document"]
 let UIComponentRect = (y) => NSMakeRect(0, panelSpec.height - y, panelSpec.width, panelSpec.lineHeight)
-let checkCopyToggle, checkScopeDropdown
+let checkCopyToggle, copyDocumentationToggle, checkScopeDropdown
 
 const createLabel = (positionY, text) => {
     const label = NSTextField.alloc().initWithFrame(UIComponentRect(positionY))
@@ -69,13 +70,19 @@ export const createSettingPanel = () => {
     )
 
     let toggleLabel = createLabel(100, "Other settings:")
-    checkCopyToggle = createToggle(120, prefernceKey.IS_CHECK, "Check copy when open a document")
+    checkCopyToggle = createToggle(120, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
+    copyDocumentationToggle = createToggle(
+        140,
+        prefernceKey.HAS_DOCUMENTATION,
+        "Maintain a copy documentation in a new page"
+    )
 
     view.addSubview(checkScopeLabel)
     view.addSubview(checkScopeDropdown)
 
     view.addSubview(toggleLabel)
     view.addSubview(checkCopyToggle)
+    view.addSubview(copyDocumentationToggle)
 
     return panel.runModal()
 }
@@ -84,6 +91,7 @@ export const updateSettings = () => {
     const checkScope = checkScopeDropdown.indexOfSelectedItem()
     Settings.setSettingForKey(prefernceKey.CHECK_SCOPE, checkScope)
     Settings.setSettingForKey(prefernceKey.IS_CHECK, checkCopyToggle.state())
+    Settings.setSettingForKey(prefernceKey.HAS_DOCUMENTATION, copyDocumentationToggle.state())
 
     UI.message(`✅ Successfully updated`)
 }

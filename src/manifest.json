@@ -6,23 +6,38 @@
   "commands": [
     {
       "name": "Set JSON",
-      "shortcut": "ctrl cmd alt j",
+      "shortcut": "ctrl cmd alt \u0020",
       "description": "Set a JSON file as copy source",
       "identifier": "copy-updater.setup",
       "handler": "setupJSON",
       "script": "./script.js"
     },
     {
-      "name": "Update Copy",
-      "shortcut": "ctrl cmd j",
-      "description": "Update copy with the selected JSON file",
-      "identifier": "copy-updater.update",
-      "handler": "updateCopy",
+      "name": "Generate JSON",
+      "description": "Generate a JSON file from selected layers",
+      "identifier": "copy-updater.generate",
+      "handler": "generateJSON",
       "script": "./script.js"
     },
     {
-      "name": "Reset Copy",
-      "shortcut": "ctrl alt j",
+      "name": "Pull from JSON",
+      "shortcut": "ctrl cmd \u0020",
+      "description": "Pull copy from a selected JSON file",
+      "identifier": "copy-updater.pull",
+      "handler": "pullCopy",
+      "script": "./script.js"
+    },
+    {
+      "name": "Push to JSON",
+      "shortcut": "shift cmd \u0020",
+      "description": "Push copy to a selected JSON file",
+      "identifier": "copy-updater.push",
+      "handler": "pushCopy",
+      "script": "./script.js"
+    },
+    {
+      "name": "Reset to Key",
+      "shortcut": "ctrl alt \u0020",
       "description": "Reset copy",
       "identifier": "copy-updater.reset",
       "handler": "resetCopy",
@@ -30,8 +45,8 @@
     },
     {
       "name": "Check Update",
-      "shortcut": "ctrl shift j",
-      "description": "Check copy udpate",
+      "shortcut": "ctrl shift \u0020",
+      "description": "Check copy sync status",
       "identifier": "copy-updater.check",
       "handler": "checkUpdate",
       "script": "./script.js"
@@ -57,10 +72,13 @@
   "menu": {
     "title": "Copy Updater",
     "items": [
-      "copy-updater.setup",
-      "copy-updater.update",
+      "copy-updater.pull",
+      "copy-updater.push",
       "copy-updater.reset",
       "copy-updater.check",
+      "-",
+      "copy-updater.setup",
+      "copy-updater.generate",
       "-",
       "copy-updater.settings"
     ]
