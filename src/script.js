@@ -33,7 +33,33 @@ const prefernceKey = {
     CHECK_SCOPE: "copyCheckScope",
     KEY: "lzhengCopyUpdaterKey",
     UPDATE_DIRECTION: "lzhengCopyUpdaterDirection",
+    COPY_GROUP_CONFIG: "lzhengCopyUpdaterCopyConfig",
+    COPY_PAGE_ID: "lzhengCopyUpdaterIndexPageId",
 }
+const copyBlockSpec = {
+    secondaryMargin: 4,
+    primaryMargin: 16,
+    sectionMargin: 64,
+    keyStyle: {
+        textColor: "#00000099",
+        fontSize: 14,
+        lineHeight: 16,
+        fontWeight: 4,
+        alignment: sketch.Text.Alignment.left,
+    },
+    valueStyle: {
+        textColor: "#000000EE",
+        fontSize: 16,
+        lineHeight: 20,
+        fontWeight: 8,
+        alignment: sketch.Text.Alignment.left,
+    },
+    copyPageName: "[Copy Index]",
+    copyPrefix: "[Copy]: ",
+    copyBlockWidth: 300,
+    copyTitleHeight: 60,
+}
+
 const readJSONAsObject = (path) => {
     try {
         const data = JSON.parse(fs.readFileSync(path))
@@ -52,7 +78,9 @@ const readDatafromConfig = () => {
     } else {
         const copyData = readJSONAsObject(copyJSONPath)
         if (Object.keys(copyData).length === 0) {
-            sketch.UI.message("❌ The JSON file was removed or contains error. Please select another one or fix it.")
+            sketch.UI.message(
+                "❌ The JSON file was removed, empty, or contains error. Please select another one or fix it."
+            )
         } else return copyData
     }
     return undefined
@@ -74,14 +102,97 @@ const setValue = (path, data, value) => {
         if (index == pathList.length - 1) {
             prev[curr] = value
         }
+        if (!prev[curr]) prev[curr] = {}
         return prev ? prev[curr] : null
     }, data || self)
+}
+
+const createCopyKeyValueGroup = (copyKey, JSONValue, parentGroup, index) => {
+    let key = new sketch.Text({
+        text: copyKey,
+        parent: parentGroup,
+        fixedWidth: true,
+        style: copyBlockSpec.keyStyle,
+        frame: {
+            x: 0,
+            y:
+                index == 0
+                    ? parentGroup.frame.height + copyBlockSpec.sectionMargin
+                    : parentGroup.frame.height + copyBlockSpec.primaryMargin,
+            width: copyBlockSpec.copyBlockWidth,
+            height: 0,
+        },
+    }).adjustToFit()
+    let value = new sketch.Text({
+        text: JSONValue,
+        parent: parentGroup,
+        fixedWidth: true,
+        style: copyBlockSpec.valueStyle,
+        frame: {
+            x: 0,
+            y: key.frame.y + key.frame.height + copyBlockSpec.secondaryMargin,
+            width: copyBlockSpec.copyBlockWidth,
+            height: 0,
+        },
+    }).adjustToFit()
+    Settings.setLayerSettingForKey(value, prefernceKey.KEY, copyKey.slice(1))
+    new sketch.Group({
+        name: copyKey,
+        parent: parentGroup,
+        layers: [value, key],
+    })
+        .adjustToFit()
+        .moveToBack()
+    parentGroup.adjustToFit()
 }
 
 const updateText = (layer, value) => {
     if (layer.type == layerType.TEXT) {
         layer.text = value
     } else layer.value = value
+}
+
+const getFileName = (path) => {
+    if (!path) return undefined
+    let name = path.substr(path.lastIndexOf("/") + 1)
+    name = name.lastIndexOf(".") != -1 ? name.substr(0, name.lastIndexOf(".")) : name
+    return name
+}
+
+const syncCopyDoc = (copyData) => {
+    let JSONPath = Settings.documentSettingForKey(doc, prefernceKey.KEY)
+    let JSONName = getFileName(JSONPath)
+    let copyPageId = Settings.documentSettingForKey(doc, prefernceKey.COPY_PAGE_ID)
+    let copyPage = doc.getLayerWithID(copyPageId)
+        ? doc.getLayerWithID(copyPageId)
+        : new sketch.Page({
+              name: copyBlockSpec.copyPageName,
+              parent: doc,
+          })
+    Settings.setDocumentSettingForKey(doc, prefernceKey.COPY_PAGE_ID, copyPage.id)
+    let copyGroupConfig = Settings.layerSettingForKey(copyPage, prefernceKey.COPY_GROUP_CONFIG)
+        ? Settings.layerSettingForKey(copyPage, prefernceKey.COPY_GROUP_CONFIG)
+        : {}
+    let copyGroup = doc.getLayerWithID(copyGroupConfig[JSONPath])
+        ? doc.getLayerWithID(copyGroupConfig[JSONPath])
+        : new sketch.Group({
+              name: copyBlockSpec.copyPageName + ": " + JSONName,
+              parent: copyPage,
+          })
+    copyGroupConfig[JSONPath] = copyGroup.id
+    copyGroup.layers.forEach((layer) => layer.remove())
+    copyGroup.frame.y -= copyBlockSpec.sectionMargin
+    copyGroup.frame.height = 0
+    Settings.setLayerSettingForKey(copyPage, prefernceKey.COPY_GROUP_CONFIG, copyGroupConfig)
+    const traverseData = (key, data, index) => {
+        if (typeof data == "string") {
+            createCopyKeyValueGroup(key, data, copyGroup, index ? index : 0)
+        } else {
+            Object.keys(data).forEach((nextKey, index) => traverseData(key + "." + nextKey, data[nextKey], index))
+        }
+    }
+
+    Object.keys(copyData).forEach((key) => traverseData("@" + key, copyData[key]))
 }
 
 const updateTextByType = (type) => {
@@ -133,10 +244,19 @@ const updateTextByType = (type) => {
             if (JSONValue != onDisplayValue) {
                 updateCounter++
                 if (!copyKey) {
-                    copyKey =
-                        item == copyItem
-                            ? item.name.replace(/\s/g, "")
-                            : item.name.replace(/\s/g, "") + "-" + copyItem.affectedLayer.name.replace(/\s/g, "")
+                    copyKey = item.name.replace(/\s/g, "")
+                    if (itemType == layerType.SYMBOLINSTANCE) {
+                        copyKey += "."
+                        const symbolDoc =
+                            item.master.getLibrary() == null ? doc : item.master.getLibrary().getDocument()
+                        copyItem.path.split("/").forEach((id) => {
+                            if (symbolDoc.getLayerWithID(id) != undefined) {
+                                copyKey += symbolDoc.getLayerWithID(id).name + "."
+                            }
+                        })
+                        copyKey = copyKey.substr(0, copyKey.length - 1)
+                    }
+                    copyKey = copyKey[0] != "@" ? copyKey : copyKey.slice(1)
                     copyKey = resolveValue(copyKey, copyData) ? `${copyKey}-id:${copyItem.id}` : copyKey
                     storedKey[index] = copyKey
                     Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
@@ -204,13 +324,21 @@ const updateTextByType = (type) => {
             break
         case updateType.TO_JSON:
             fs.writeFileSync(Settings.documentSettingForKey(doc, prefernceKey.KEY), JSON.stringify(copyData))
-            sketch.UI.message(`🙌 ${updateCounter} text(s) exported`)
+            sketch.UI.message(
+                `🙌 ${updateCounter} text(s) exported. Please review other text(s) linked with the same key(s)`
+            )
+            checkUpdate(updateCounter)
             break
         case updateType.MIXED:
             fs.writeFileSync(Settings.documentSettingForKey(doc, prefernceKey.KEY), JSON.stringify(copyData))
-            sketch.UI.message(`🙌 ${updateCounter} text(s) synced`)
+            sketch.UI.message(
+                `🙌 ${updateCounter} text(s) synced. Please review other text(s) linked with the same key(s)`
+            )
+            checkUpdate(updateCounter)
             break
     }
+
+    if (Settings.settingForKey(prefernceKey.HAS_DOCUMENTATION) && type != updateType.KEY) syncCopyDoc(copyData)
 }
 
 const selectOneLayer = (layer) => {
@@ -543,7 +671,7 @@ export const checkUpdateOnOpenDocument = (context) => {
     }, 1000)
 }
 
-export const checkUpdate = () => {
+export const checkUpdate = (updateCounter) => {
     const copyData = readDatafromConfig()
     if (!copyData) return
 
@@ -633,7 +761,9 @@ export const checkUpdate = () => {
     if (unsyncedLayers.length !== 0) {
         displayResult(unsyncedLayers, unsyncedCopyAmount)
     } else {
-        sketch.UI.message("🙌 No unsynced texts found")
+        if (updateCounter) {
+            sketch.UI.message("🙌 No unsynced texts found")
+        } else sketch.UI.message(`🙌 ${updateCounter} text(s) exported and no unsynced texts found `)
     }
 }
 
@@ -646,6 +776,12 @@ export const pullCopy = () => {
 }
 
 export const pushCopy = () => {
+    let isUpdatingCopyIndex = false
+    const copyPageID = Settings.documentSettingForKey(doc, prefernceKey.COPY_PAGE_ID)
+    selectedLayers.layers.forEach((layer) => {
+        isUpdatingCopyIndex = layer.getParentPage().id == copyPageID ? true : false
+    })
+
     updateTextByType(updateType.TO_JSON)
 }
 
@@ -654,7 +790,7 @@ export const generateJSON = () => {
     if (sourceFilePath) {
         Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
         const initData = {}
-        initData[doc.id] = "Generated by Copy-Updater"
+        initData[sourceFilePath] = "Copy Index: " + getFileName(sourceFilePath)
         fs.writeFileSync(sourceFilePath, JSON.stringify(initData))
         updateTextByType(updateType.TO_JSON)
     }

@@ -71,11 +71,7 @@ export const createSettingPanel = () => {
 
     let toggleLabel = createLabel(100, "Other settings:")
     checkCopyToggle = createToggle(120, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
-    copyDocumentationToggle = createToggle(
-        140,
-        prefernceKey.HAS_DOCUMENTATION,
-        "Maintain a copy documentation in a new page"
-    )
+    copyDocumentationToggle = createToggle(140, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
 
     view.addSubview(checkScopeLabel)
     view.addSubview(checkScopeDropdown)

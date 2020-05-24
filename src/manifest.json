@@ -44,9 +44,9 @@
       "script": "./script.js"
     },
     {
-      "name": "Check Update",
+      "name": "Check Unsynced Copy",
       "shortcut": "ctrl shift \u0020",
-      "description": "Check copy sync status",
+      "description": "Check unsynced copies and display them",
       "identifier": "copy-updater.check",
       "handler": "checkUpdate",
       "script": "./script.js"
