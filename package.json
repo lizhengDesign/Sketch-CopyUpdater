@@ -1,7 +1,7 @@
 {
   "name": "copy-updater",
   "description": "A Sketch plugin that updates copy based on selected JSON",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/lizhengDesign/Sketch-CopyUpdater.git"
