@@ -21,6 +21,18 @@ For text: use @your_key as content
 For symbol and nested symbol: use @your_key as its override value
 ```
 
+Use | to specify character count
+
+-   |n: Truncate text into n number of characters
+-   |n...: Truncate text into n number of characters and add ... at the end
+-   |...n: Truncate text into n number of characters and add ... in the middle
+
+```
+@your_key|20
+@your_key|20...
+@your_key|...20
+```
+
 ### Remove key
 
 use -@ to remove a key
@@ -54,6 +66,16 @@ Sketch File
 
 ```
 Textlayer (text): @header
-Intro Symbol 1 (override value): @intro1.title, @intro1.body
-Intro Symbol 2 (override value): @intro2.title, @intro2.body
+Intro Symbol 1 (override value): @intro1.title, @intro1.body|20...
+Intro Symbol 2 (override value): @intro2.title, @intro2.body|...20
+```
+
+On The Screen
+
+```
+This is a header
+Intro1
+This is body copy fo...
+Intro2
+This is bo...or intro 2
 ```

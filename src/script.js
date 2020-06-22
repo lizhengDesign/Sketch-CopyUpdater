@@ -16,6 +16,7 @@ const layerType = {
     SHAPEPATH: "ShapePath",
     TEXT: "Text",
     SYMBOLINSTANCE: "SymbolInstance",
+    SYMBOLMASTER: "SymbolMaster",
 }
 const updateType = {
     KEY: 0,
@@ -194,6 +195,31 @@ const syncCopyDoc = (copyData) => {
     Object.keys(copyData).forEach((key) => traverseData("@" + key, copyData[key]))
 }
 
+const camelize = (string) => {
+    return string
+        .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
+            return index === 0 ? word.toLowerCase() : word.toUpperCase()
+        })
+        .replace(/\s+/g, "")
+}
+
+const getFullName = (instance, copyItem) => {
+    let symbolDoc = instance.master.getLibrary() == null ? doc : instance.master.getLibrary().getDocument()
+    let pathList = copyItem.path.split("/")
+    let name = ""
+    pathList.forEach((id) => {
+        const element = symbolDoc.getLayerWithID(id)
+        if (element != undefined) {
+            name += camelize(element.name) + "."
+            if (element.type != layerType.TEXT) {
+                symbolDoc = element.master.getLibrary() == null ? symbolDoc : element.master.getLibrary().getDocument()
+            }
+        }
+    })
+    name = name.substr(0, name.length - 1)
+    return name
+}
+
 const updateTextByType = (type) => {
     if (selectedLayers.isEmpty) {
         sketch.UI.message("❌ Please select at least 1 layer or artboard.")
@@ -207,6 +233,7 @@ const updateTextByType = (type) => {
 
     const updateCopyBasedOnDirection = (item, index, direction, itemType) => {
         let copyKey
+        let JSONValue = undefined
         let storedKey = Settings.layerSettingForKey(item, prefernceKey.KEY)
         let copyItem = itemType == layerType.TEXT ? item : item.overrides[index]
         let onDisplayValue = itemType == layerType.TEXT ? item.text : copyItem.value
@@ -230,7 +257,34 @@ const updateTextByType = (type) => {
                 copyKey = storedKey[index]
         }
 
-        const JSONValue = copyKey ? resolveValue(copyKey, copyData) : undefined
+        if (copyKey) {
+            if (copyKey.indexOf("|") !== -1) {
+                const fullValue = resolveValue(copyKey.substr(0, copyKey.indexOf("|")), copyData)
+                const option = copyKey
+                    .substr(copyKey.indexOf("|") + 1)
+                    .replace("…", "...")
+                    .replace("⋯", "...")
+                let charCount = fullValue.length
+                switch (option.indexOf("...")) {
+                    case -1:
+                        charCount = parseInt(option)
+                        JSONValue = fullValue.substr(0, charCount)
+                        break
+                    case 0:
+                        charCount = parseInt(option.substr(3))
+                        JSONValue =
+                            fullValue.length > charCount
+                                ? fullValue.substr(0, Math.round(charCount / 2)) +
+                                  "..." +
+                                  fullValue.substr(-Math.round(charCount / 2))
+                                : fullValue
+                        break
+                    default:
+                        charCount = parseInt(option.substr(0, option.indexOf("...")))
+                        JSONValue = fullValue.length > charCount ? fullValue.substr(0, charCount) + "..." : fullValue
+                }
+            } else JSONValue = resolveValue(copyKey, copyData)
+        }
 
         const syncCopyFromJSON = () => {
             if (JSONValue && JSONValue != onDisplayValue) {
@@ -243,17 +297,9 @@ const updateTextByType = (type) => {
             if (JSONValue != onDisplayValue) {
                 updateCounter++
                 if (!copyKey) {
-                    copyKey = item.name.replace(/\s/g, "")
+                    copyKey = camelize(item.name)
                     if (itemType == layerType.SYMBOLINSTANCE) {
-                        copyKey += "."
-                        const symbolDoc =
-                            item.master.getLibrary() == null ? doc : item.master.getLibrary().getDocument()
-                        copyItem.path.split("/").forEach((id) => {
-                            if (symbolDoc.getLayerWithID(id) != undefined) {
-                                copyKey += symbolDoc.getLayerWithID(id).name + "."
-                            }
-                        })
-                        copyKey = copyKey.substr(0, copyKey.length - 1)
+                        copyKey = `${copyKey}.${getFullName(item, copyItem)}`
                     }
                     copyKey = copyKey[0] != "@" ? copyKey : copyKey.slice(1)
                     copyKey = resolveValue(copyKey, copyData) ? `${copyKey}-id:${copyItem.id}` : copyKey
