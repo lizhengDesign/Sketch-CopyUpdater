@@ -236,6 +236,12 @@ const updateTextByType = (type) => {
         let JSONValue = undefined
         let storedKey = Settings.layerSettingForKey(item, prefernceKey.KEY)
         let copyItem = itemType == layerType.TEXT ? item : item.overrides[index]
+        let lineHeight =
+            itemType == layerType.TEXT
+                ? item.style.lineHeight == null
+                    ? item.style.getDefaultLineHeight()
+                    : item.style.lineHeight
+                : copyItem.affectedLayer.style.lineHeight
         let onDisplayValue = itemType == layerType.TEXT ? item.text : copyItem.value
         if (!storedKey) storedKey = {}
 
@@ -264,6 +270,7 @@ const updateTextByType = (type) => {
                     .substr(copyKey.indexOf("|") + 1)
                     .replace("…", "...")
                     .replace("⋯", "...")
+                // const isTruncatedByLine = option.indexOf("l") !== -1
                 let charCount = fullValue.length
                 switch (option.indexOf("...")) {
                     case -1:
