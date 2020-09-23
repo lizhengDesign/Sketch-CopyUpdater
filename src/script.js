@@ -90,6 +90,7 @@ const readDatafromConfig = () => {
 const resolveValue = (path, data) => {
     if (!path) return undefined
     let copyValue = path.split(/\.|\]\.|\[|\]\[|\]/).reduce((prev, curr) => {
+        if (curr === "") return prev
         return prev ? prev[curr] : null
     }, data || self)
     if (typeof copyValue != "string") {
