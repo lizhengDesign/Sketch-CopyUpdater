@@ -1,13 +1,13 @@
 {
   "name": "Copy Updater",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [
     {
-      "name": "Set JSON",
+      "name": "Link JSON",
       "shortcut": "ctrl cmd alt \u0020",
-      "description": "Set a JSON file as copy source",
+      "description": "Link a JSON file as copy source",
       "identifier": "copy-updater.setup",
       "handler": "setupJSON",
       "script": "./script.js"

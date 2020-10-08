@@ -862,4 +862,5 @@ export const setupJSON = () => {
     })
     const sourceFilePath = selectedFile[0]
     if (sourceFilePath) Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
+    if (!selectedLayers.isEmpty) pullCopy()
 }
