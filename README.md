@@ -10,16 +10,30 @@ A Sketch plugin that updates copy based on selected JSON
 
 ## How to use
 
-### Add key
+### 1. Link & Pull
 
-Use @ to assign a key
-
-The corresponding value will be retrieved after an update.
+Use @ to assign a key. The corresponding value will be retrieved after an update.
 
 ```
 For text: use @your_key as content
 For symbol and nested symbol: use @your_key as its override value
 ```
+
+<img src="./assets/pullDemo.gif" alt="Pull Demo" width="800">
+
+### 2. Generate & Push
+
+You can either generate a JSON file from selected elements or push updated texts to a linked JSON.
+
+<img src="./assets/pushDemo.gif" alt="Push Demo" width="800">
+
+### 3. Check
+
+Use Check to scan every editable text area, compares them with the linked JSON file, and list all unsynced strings for you to decide to pull or push.
+
+<img src="./assets/checkDemo.gif" alt="Check Demo" width="800">
+
+### 4. Truncation
 
 Use | to specify character count
 
@@ -33,6 +47,8 @@ Use | to specify character count
 @your_key|...20
 ```
 
+<img src="./assets/truncationDemo.gif" alt="Truncation Demo" width="800">
+
 ### Remove key
 
 use -@ to remove a key
@@ -44,7 +60,7 @@ For text: use -@new_value as content
 For symbol and nested symbol: use -@new_value as its override value
 ```
 
-### Examples:
+## Examples:
 
 JSON
 
