@@ -31,6 +31,7 @@ const updateDirection = {
 const prefernceKey = {
     IS_CHECK: "isCheckOnOpenDocument",
     HAS_DOCUMENTATION: "hasCopyDocumentation",
+    HAS_EDITABLE_ONLY_SELECTED: "hasExportEditableOnlySelected",
     CHECK_SCOPE: "copyCheckScope",
     KEY: "lzhengCopyUpdaterKey",
     UPDATE_DIRECTION: "lzhengCopyUpdaterDirection",
@@ -167,9 +168,9 @@ const syncCopyDoc = (copyData) => {
     let copyPage = doc.getLayerWithID(copyPageId)
         ? doc.getLayerWithID(copyPageId)
         : new sketch.Page({
-            name: copyBlockSpec.copyPageName + " (Reference Only)",
-            parent: doc,
-        })
+              name: copyBlockSpec.copyPageName + " (Reference Only)",
+              parent: doc,
+          })
     Settings.setDocumentSettingForKey(doc, prefernceKey.COPY_PAGE_ID, copyPage.id)
     let copyGroupConfig = Settings.layerSettingForKey(copyPage, prefernceKey.COPY_GROUP_CONFIG)
         ? Settings.layerSettingForKey(copyPage, prefernceKey.COPY_GROUP_CONFIG)
@@ -177,9 +178,9 @@ const syncCopyDoc = (copyData) => {
     let copyGroup = doc.getLayerWithID(copyGroupConfig[JSONPath])
         ? doc.getLayerWithID(copyGroupConfig[JSONPath])
         : new sketch.Group({
-            name: copyBlockSpec.copyPageName + ": " + JSONName,
-            parent: copyPage,
-        })
+              name: copyBlockSpec.copyPageName + ": " + JSONName,
+              parent: copyPage,
+          })
     copyGroupConfig[JSONPath] = copyGroup.id
     copyGroup.layers.forEach((layer) => layer.remove())
     copyGroup.frame.y -= copyBlockSpec.sectionMargin
@@ -283,8 +284,8 @@ const updateTextByType = (type) => {
                         JSONValue =
                             fullValue.length > charCount
                                 ? fullValue.substr(0, Math.round(charCount / 2)) +
-                                "..." +
-                                fullValue.substr(-Math.round(charCount / 2))
+                                  "..." +
+                                  fullValue.substr(-Math.round(charCount / 2))
                                 : fullValue
                         break
                     default:
@@ -346,7 +347,10 @@ const updateTextByType = (type) => {
                     break
                 case layerType.SYMBOLINSTANCE:
                     layer.overrides.forEach((override, index) => {
-                        if (override.property == "stringValue" && override.editable) {
+                        if (
+                            override.property == "stringValue" &&
+                            (Settings.settingForKey(prefernceKey.HAS_EDITABLE_ONLY_SELECTED) ? override.editable : true)
+                        ) {
                             let direction = directions[index] ? directions[index] : updateDirection.FROM_JSON
                             updateCopyBasedOnDirection(layer, index, direction, layerType.SYMBOLINSTANCE)
                         }

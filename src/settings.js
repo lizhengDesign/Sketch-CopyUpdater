@@ -9,15 +9,16 @@ const prefernceKey = {
     IS_CHECK: "isCheckOnOpenDocument",
     HAS_DOCUMENTATION: "hasCopyDocumentation",
     CHECK_SCOPE: "copyCheckScope",
+    HAS_EDITABLE_ONLY_SELECTED: "hasExportEditableOnlySelected",
 }
 const panelSpec = {
     width: 300,
-    height: 150,
+    height: 170,
     lineHeight: 25,
 }
 const checkScopeOptions = ["Selected page", 'Pages starting with "@"', "Entire document"]
 let UIComponentRect = (y) => NSMakeRect(0, panelSpec.height - y, panelSpec.width, panelSpec.lineHeight)
-let checkCopyToggle, copyDocumentationToggle, checkScopeDropdown
+let checkCopyToggle, copyDocumentationToggle, exportAllStringsToggle, checkScopeDropdown
 
 const createLabel = (positionY, text) => {
     const label = NSTextField.alloc().initWithFrame(UIComponentRect(positionY))
@@ -71,7 +72,12 @@ export const createSettingPanel = () => {
 
     let toggleLabel = createLabel(100, "Other settings:")
     checkCopyToggle = createToggle(120, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
-    copyDocumentationToggle = createToggle(140, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
+    exportAllStringsToggle = createToggle(
+        140,
+        prefernceKey.HAS_EDITABLE_ONLY_SELECTED,
+        "Only export editable text to JSON"
+    )
+    copyDocumentationToggle = createToggle(160, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
 
     view.addSubview(checkScopeLabel)
     view.addSubview(checkScopeDropdown)
@@ -79,6 +85,7 @@ export const createSettingPanel = () => {
     view.addSubview(toggleLabel)
     view.addSubview(checkCopyToggle)
     view.addSubview(copyDocumentationToggle)
+    view.addSubview(exportAllStringsToggle)
 
     return panel.runModal()
 }
@@ -87,6 +94,7 @@ export const updateSettings = () => {
     const checkScope = checkScopeDropdown.indexOfSelectedItem()
     Settings.setSettingForKey(prefernceKey.CHECK_SCOPE, checkScope)
     Settings.setSettingForKey(prefernceKey.IS_CHECK, checkCopyToggle.state())
+    Settings.setSettingForKey(prefernceKey.HAS_EDITABLE_ONLY_SELECTED, exportAllStringsToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_DOCUMENTATION, copyDocumentationToggle.state())
 
     UI.message(`✅ Successfully updated`)
