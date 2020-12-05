@@ -22,7 +22,7 @@ const saveAsExcel = async (ExcelFilePath) => {
     const workbook = new ExcelJS.Workbook()
     const worksheet = workbook.addWorksheet()
 
-    const imgWidth = 320
+    const scale = 1.125
     const rowHeight = 40
 
     worksheet.properties.defaultRowHeight = rowHeight
@@ -31,12 +31,14 @@ const saveAsExcel = async (ExcelFilePath) => {
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCCCCC" } }
 
     base64ImgList.forEach((imgItem, i) => {
+        const scaledImgWidth = imgItem.width / scale
+
         const imgCol = worksheet.getColumn(i * 3 + 1)
         const copyCol = worksheet.getColumn(i * 3 + 2)
         const dividerCol = worksheet.getColumn(i * 3 + 3)
 
         worksheet.mergeCells(1, i * 3 + 1, 1, i * 3 + 2)
-        imgCol.width = 40
+        imgCol.width = scaledImgWidth / 8
         copyCol.width = 60
         dividerCol.width = 4
         copyCol.values = copyList[i]
@@ -52,7 +54,7 @@ const saveAsExcel = async (ExcelFilePath) => {
             right: { style: "think", color: { argb: "FFFFFFFF" } },
         }
 
-        const imgHeight = imgWidth * imgItem.ratio
+        const scaledImgHeight = scaledImgWidth * imgItem.ratio
 
         const image = workbook.addImage({
             base64: imgItem.img,
@@ -60,7 +62,7 @@ const saveAsExcel = async (ExcelFilePath) => {
         })
         worksheet.addImage(image, {
             tl: { col: i * 3, row: 1 },
-            ext: { width: imgWidth, height: imgHeight },
+            ext: { width: scaledImgWidth, height: scaledImgHeight },
         })
     })
 
@@ -105,6 +107,7 @@ export const generateExcel = () => {
             if (layer.type == layerType.ARTBOARD) {
                 base64ImgList.push({
                     img: getImgFromLayer(layer),
+                    width: layer.frame.width,
                     ratio: layer.frame.height / layer.frame.width,
                 })
                 copyList[i] = [layer.name]
