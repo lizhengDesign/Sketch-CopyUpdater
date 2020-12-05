@@ -19,19 +19,19 @@ For text: use @your_key as content
 For symbol and nested symbol: use @your_key as its override value
 ```
 
-<img src="./assets/pullDemo.gif" alt="Pull Demo" width="800">
+<img src="./instructions/pullDemo.gif" alt="Pull Demo" width="800">
 
 ### 2. Generate & Push
 
 You can either generate a JSON file from selected elements or push updated texts to a linked JSON.
 
-<img src="./assets/pushDemo.gif" alt="Push Demo" width="800">
+<img src="./instructions/pushDemo.gif" alt="Push Demo" width="800">
 
 ### 3. Check
 
 Use Check to scan every editable text area, compares them with the linked JSON file, and list all unsynced strings for you to decide to pull or push.
 
-<img src="./assets/checkDemo.gif" alt="Check Demo" width="800">
+<img src="./instructions/checkDemo.gif" alt="Check Demo" width="800">
 
 ### 4. Truncation
 
@@ -47,7 +47,7 @@ Use | to specify character count
 @your_key|...20
 ```
 
-<img src="./assets/truncationDemo.gif" alt="Truncation Demo" width="800">
+<img src="./instructions/truncationDemo.gif" alt="Truncation Demo" width="800">
 
 ### Remove key
 

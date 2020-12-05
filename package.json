@@ -36,6 +36,8 @@
   "author": "Li Zheng",
   "dependencies": {
     "@skpm/dialog": "^0.4.0",
-    "@skpm/fs": "^0.2.6"
+    "@skpm/fs": "^0.2.6",
+    "exceljs": "^4.2.0",
+    "ls-xlsx": "^0.11.5"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "Copy Updater",
-  "version": "1.4.7",
+  "version": "1.5.0",
   "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [
@@ -58,6 +58,14 @@
       "script": "./settings.js"
     },
     {
+      "name": "Generate Excel",
+      "shortcut": "ctrl shift \u0009",
+      "description": "Generate an Excel file with all text from selected layers",
+      "identifier": "copy-updater.export",
+      "handler": "generateExcel",
+      "script": "./export.js"
+    },
+    {
       "name": "Check Update when Open",
       "description": "Check copy udpate when a document is open",
       "script": "./script.js",
@@ -80,7 +88,8 @@
       "copy-updater.setup",
       "copy-updater.generate",
       "-",
-      "copy-updater.settings"
+      "copy-updater.settings",
+      "copy-updater.export"
     ]
   }
 }
