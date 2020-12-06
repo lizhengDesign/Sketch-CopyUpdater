@@ -4,6 +4,8 @@ const sketch = require("sketch")
 const Settings = sketch.Settings
 let doc = sketch.getSelectedDocument()
 let selectedLayers = doc.selectedLayers
+let JSONPath = ""
+let isJSONPathUpdated = false
 const maxPanelHeight = 480
 const panelMargin = 20
 const itemWidth = 200
@@ -34,6 +36,7 @@ const prefernceKey = {
     HAS_EDITABLE_ONLY_SELECTED: "hasExportEditableOnlySelected",
     CHECK_SCOPE: "copyCheckScope",
     KEY: "lzhengCopyUpdaterKey",
+    JSON_PATH: "lzhengCopyUPdaterJSONPath",
     UPDATE_DIRECTION: "lzhengCopyUpdaterDirection",
     COPY_GROUP_CONFIG: "lzhengCopyUpdaterCopyConfig",
     COPY_PAGE_ID: "lzhengCopyUpdaterIndexPageId",
@@ -71,14 +74,14 @@ const readJSONAsObject = (path) => {
     }
 }
 
-const readDatafromConfig = () => {
-    const copyJSONPath = Settings.documentSettingForKey(doc, prefernceKey.KEY)
+const readDatafromConfig = (path) => {
+    JSONPath = path ? path : Settings.documentSettingForKey(doc, prefernceKey.KEY)
 
-    if (!copyJSONPath) {
+    if (!JSONPath) {
         sketch.UI.message("No copy JSON file found")
         return undefined
     } else {
-        const copyData = readJSONAsObject(copyJSONPath)
+        const copyData = readJSONAsObject(JSONPath)
         if (Object.keys(copyData).length === 0) {
             sketch.UI.message(
                 "❌ The JSON file was removed, empty, or contains error. Please select another one or fix it."
@@ -234,6 +237,11 @@ const updateTextByType = (type) => {
     let updateCounter = 0
 
     const updateCopyBasedOnDirection = (item, index, direction, itemType) => {
+        copyData = isJSONPathUpdated
+            ? copyData
+            : readDatafromConfig(Settings.layerSettingForKey(item, prefernceKey.JSON_PATH))
+        if (!copyData) return
+
         let copyKey
         let JSONValue = undefined
         let storedKey = Settings.layerSettingForKey(item, prefernceKey.KEY)
@@ -252,6 +260,8 @@ const updateTextByType = (type) => {
                 copyKey = onDisplayValue.slice(1)
                 storedKey[index] = copyKey
                 Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
+                if (isJSONPathUpdated || !Settings.layerSettingForKey(item, prefernceKey.JSON_PATH))
+                    Settings.setLayerSettingForKey(item, prefernceKey.JSON_PATH, JSONPath)
                 break
             case "-":
                 if (onDisplayValue[1] == "@") {
@@ -259,10 +269,12 @@ const updateTextByType = (type) => {
                     copyKey = undefined
                     storedKey[index] = copyKey
                     Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
+                    Settings.setLayerSettingForKey(item, prefernceKey.JSON_PATH, undefined)
                 } else copyKey = storedKey[index]
                 break
             default:
                 copyKey = storedKey[index]
+                Settings.setLayerSettingForKey(item, prefernceKey.JSON_PATH, JSONPath)
         }
 
         if (copyKey) {
@@ -314,6 +326,7 @@ const updateTextByType = (type) => {
                     copyKey = resolveValue(copyKey, copyData) ? `${copyKey}-id:${copyItem.id}` : copyKey
                     storedKey[index] = copyKey
                     Settings.setLayerSettingForKey(item, prefernceKey.KEY, storedKey)
+                    Settings.setLayerSettingForKey(item, prefernceKey.JSON_PATH, JSONPath)
                 }
                 setValue(copyKey, copyData, onDisplayValue)
             }
@@ -729,7 +742,7 @@ export const checkUpdateOnOpenDocument = (context) => {
 }
 
 export const checkUpdate = (updateCounter) => {
-    const copyData = readDatafromConfig()
+    let copyData = readDatafromConfig()
     if (!copyData) return
 
     let unsyncedLayers = []
@@ -748,6 +761,9 @@ export const checkUpdate = (updateCounter) => {
 
     const checkChildrenLayers = (layer) => {
         if (layer.layers == undefined) {
+            copyData = readDatafromConfig(Settings.layerSettingForKey(layer, prefernceKey.JSON_PATH))
+            if (!copyData) return
+
             let storedKey = Settings.layerSettingForKey(layer, prefernceKey.KEY)
             if (!storedKey) return
             switch (layer.type) {
@@ -855,6 +871,7 @@ export const generateJSON = () => {
         const initData = {}
         initData[sourceFilePath] = copyBlockSpec.copyPageName + ": " + getFileName(sourceFilePath)
         fs.writeFileSync(sourceFilePath, JSON.stringify(initData))
+        JSONPath = sourceFilePath
         updateTextByType(updateType.TO_JSON)
     }
 }
@@ -864,7 +881,8 @@ export const setupJSON = () => {
         properties: ["openFile"],
         filters: [{ extensions: ["json"] }],
     })
-    const sourceFilePath = selectedFile[0]
-    if (sourceFilePath) Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, sourceFilePath)
+    JSONPath = selectedFile[0]
+    isJSONPathUpdated = true
+    if (JSONPath) Settings.setDocumentSettingForKey(doc, prefernceKey.KEY, JSONPath)
     if (!selectedLayers.isEmpty) pullCopy()
 }
