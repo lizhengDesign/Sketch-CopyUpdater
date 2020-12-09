@@ -10,15 +10,27 @@ const prefernceKey = {
     HAS_DOCUMENTATION: "hasCopyDocumentation",
     CHECK_SCOPE: "copyCheckScope",
     HAS_EDITABLE_ONLY_SELECTED: "hasExportEditableOnlySelected",
+    EXPORT_ORIENTATION: "exportOrientation",
+    EXPORT_SLICE_ONLY: "exportSliceOnly",
+    EXPORT_INVIEW_ONLY: "exportInViewOnly",
+    HAS_COPY_REVISION: "hasCopyRevision",
 }
 const panelSpec = {
     width: 300,
-    height: 170,
+    height: 305,
     lineHeight: 25,
 }
 const checkScopeOptions = ["Selected page", 'Pages starting with "@"', "Entire document"]
+const exportOrientationOptions = ["Layout orientation: Horizontal", "Layout orientation: Vertical"]
 let UIComponentRect = (y) => NSMakeRect(0, panelSpec.height - y, panelSpec.width, panelSpec.lineHeight)
-let checkCopyToggle, copyDocumentationToggle, exportAllStringsToggle, checkScopeDropdown
+let checkCopyToggle,
+    copyDocumentationToggle,
+    exportAllStringsToggle,
+    exportSliceOnlyToggle,
+    exportInViewOnlyToggle,
+    copyRevisionToggle,
+    checkScopeDropdown,
+    exportOrientationDropdown
 
 const createLabel = (positionY, text) => {
     const label = NSTextField.alloc().initWithFrame(UIComponentRect(positionY))
@@ -70,19 +82,43 @@ export const createSettingPanel = () => {
         checkScopeOptions[Settings.settingForKey(prefernceKey.CHECK_SCOPE)]
     )
 
-    let toggleLabel = createLabel(100, "Other settings:")
-    checkCopyToggle = createToggle(120, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
+    let exportOrientationLabel = createLabel(100, "Excel settings:")
+    exportOrientationDropdown = createDropdown(
+        120,
+        exportOrientationOptions,
+        exportOrientationOptions[Settings.settingForKey(prefernceKey.EXPORT_ORIENTATION)]
+    )
+    exportSliceOnlyToggle = createToggle(
+        145,
+        prefernceKey.EXPORT_SLICE_ONLY,
+        "Only export slices with 'copy' as Prefix or Suffix"
+    )
+    exportInViewOnlyToggle = createToggle(
+        165,
+        prefernceKey.EXPORT_INVIEW_ONLY,
+        "Only export content appearing in the artboards"
+    )
+    copyRevisionToggle = createToggle(185, prefernceKey.HAS_COPY_REVISION, "Add a copy revision column")
+
+    let otherLabel = createLabel(235, "Other settings:")
+    checkCopyToggle = createToggle(255, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
     exportAllStringsToggle = createToggle(
-        140,
+        275,
         prefernceKey.HAS_EDITABLE_ONLY_SELECTED,
         "Only export editable text to JSON"
     )
-    copyDocumentationToggle = createToggle(160, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
+    copyDocumentationToggle = createToggle(295, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
 
     view.addSubview(checkScopeLabel)
     view.addSubview(checkScopeDropdown)
 
-    view.addSubview(toggleLabel)
+    view.addSubview(exportSliceOnlyToggle)
+    view.addSubview(exportInViewOnlyToggle)
+    view.addSubview(copyRevisionToggle)
+    view.addSubview(exportOrientationLabel)
+    view.addSubview(exportOrientationDropdown)
+
+    view.addSubview(otherLabel)
     view.addSubview(checkCopyToggle)
     view.addSubview(copyDocumentationToggle)
     view.addSubview(exportAllStringsToggle)
@@ -92,7 +128,12 @@ export const createSettingPanel = () => {
 
 export const updateSettings = () => {
     const checkScope = checkScopeDropdown.indexOfSelectedItem()
+    const orientation = exportOrientationDropdown.indexOfSelectedItem()
     Settings.setSettingForKey(prefernceKey.CHECK_SCOPE, checkScope)
+    Settings.setSettingForKey(prefernceKey.EXPORT_SLICE_ONLY, exportSliceOnlyToggle.state())
+    Settings.setSettingForKey(prefernceKey.EXPORT_INVIEW_ONLY, exportInViewOnlyToggle.state())
+    Settings.setSettingForKey(prefernceKey.HAS_COPY_REVISION, copyRevisionToggle.state())
+    Settings.setSettingForKey(prefernceKey.EXPORT_ORIENTATION, orientation)
     Settings.setSettingForKey(prefernceKey.IS_CHECK, checkCopyToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_EDITABLE_ONLY_SELECTED, exportAllStringsToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_DOCUMENTATION, copyDocumentationToggle.state())
