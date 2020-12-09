@@ -67,13 +67,48 @@ const addNote = (copyItem, copyCell) => {
     }
 }
 
+const addFormattingForCopyRevision = (worksheet, ref, formulae) => {
+    if (hasCopyRevision) {
+        worksheet.addConditionalFormatting({
+            ref: ref,
+            rules: [
+                {
+                    type: "expression",
+                    formulae: [formulae],
+                    style: { font: { color: { argb: "FFFF3333" }, bold: true } },
+                },
+                {
+                    type: "expression",
+                    formulae: [formulae],
+                    style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFCCCC" } } },
+                },
+            ],
+        })
+    }
+}
+
+const getColLetterByNumber = (int) => {
+    let col = ""
+    for (let a = 1, b = 26; (int -= a) >= 0; a = b, b *= 26) {
+        col = String.fromCharCode(parseInt((int % b) / a) + 65) + col
+    }
+    return col
+}
+
 const generateHorizontalSheet = (workbook, worksheet) => {
     const scale = 1.125
     const rowHeight = 40
 
+    const colUnit = hasCopyRevision ? 4 : 3
+
     worksheet.properties.defaultRowHeight = rowHeight
     worksheet.views = [{ state: "frozen", ySplit: 1 }]
-    worksheet.pageSetup = { fitToWidth: base64ImgList.length }
+    worksheet.pageSetup = {
+        orientation: hasCopyRevision ? "landscape" : "portrait",
+        fitToPage: true,
+        fitToWidth: base64ImgList.length,
+        fitToHeight: 1,
+    }
 
     const headerRow = worksheet.getRow(1)
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCCCCC" } }
@@ -81,27 +116,46 @@ const generateHorizontalSheet = (workbook, worksheet) => {
     base64ImgList.forEach((imgItem, i) => {
         const scaledImgWidth = imgItem.width / scale
 
-        const imgCol = worksheet.getColumn(i * 3 + 1)
-        const copyCol = worksheet.getColumn(i * 3 + 2)
-        const dividerCol = worksheet.getColumn(i * 3 + 3)
+        const imgCol = worksheet.getColumn(i * colUnit + 1)
+        const copyCol = worksheet.getColumn(i * colUnit + 2)
+        const revisionCol = worksheet.getColumn(i * colUnit + 3)
+        const dividerCol = worksheet.getColumn(i * colUnit + colUnit)
 
-        worksheet.mergeCells(1, i * 3 + 1, 1, i * 3 + 2)
+        worksheet.mergeCells(1, i * colUnit + 1, 1, i * colUnit + 2)
         copyList[i].forEach((copyItem, j) => {
-            const copyCell = worksheet.getCell(j + 1, i * 3 + 2)
+            const copyCell = worksheet.getCell(j + 1, i * colUnit + 2)
+            const revisionCell = worksheet.getCell(j + 1, i * colUnit + 3)
             worksheet.getRow(j + 1).height = rowHeight
             copyCell.value = copyItem.text
+            if (hasCopyRevision) revisionCell.value = j === 0 ? "Copy Revision" : copyItem.text
             addNote(copyItem, copyCell)
         })
 
         imgCol.width = scaledImgWidth / 8
         copyCol.width = 60
-        dividerCol.width = 4
         copyCol.font = { size: 14 }
         copyCol.alignment = copyAlignment
+        dividerCol.width = 4
         dividerCol.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF999999" } }
         imgCol.border = imgBolder
         copyCol.border = {
             right: { style: "think", color: { argb: "FFFFFFFF" } },
+        }
+
+        if (hasCopyRevision) {
+            revisionCol.width = 60
+            revisionCol.font = { size: 14, color: { argb: "FFBBBBBB" } }
+            revisionCol.alignment = copyAlignment
+            revisionCol.border = {
+                right: { style: "think", color: { argb: "FFFFFFFF" } },
+            }
+            const copyColLetter = getColLetterByNumber(i * colUnit + 2)
+            const revisionColLetter = getColLetterByNumber(i * colUnit + 3)
+            addFormattingForCopyRevision(
+                worksheet,
+                "$" + revisionColLetter + ":$" + revisionColLetter,
+                "$" + revisionColLetter + "1<>$" + copyColLetter + "1"
+            )
         }
 
         const scaledImgHeight = scaledImgWidth * imgItem.ratio
@@ -111,8 +165,8 @@ const generateHorizontalSheet = (workbook, worksheet) => {
             extension: "jpeg",
         })
         worksheet.addImage(image, {
-            tl: { col: i * 3, row: 1 },
-            br: { col: i * 3 + 1, row: scaledImgHeight / rowHeight / 1.25 },
+            tl: { col: i * colUnit, row: 1 },
+            br: { col: i * colUnit + 1, row: scaledImgHeight / rowHeight / 1.25 },
             // ext: { width: scaledImgWidth, height: scaledImgHeight },
         })
     })
@@ -142,7 +196,7 @@ const generateVerticalSheet = (workbook, worksheet) => {
     let currentRow = 1
 
     worksheet.pageSetup = {
-        orientation: "landscape",
+        orientation: hasCopyRevision ? "landscape" : "portrait",
         scale: Math.floor((columnWidth * 2.5 * 57) / (scaledImgWidth / 8 + columnWidth * 2)),
     }
 
@@ -189,23 +243,7 @@ const generateVerticalSheet = (workbook, worksheet) => {
         currentRow++
     })
 
-    if (hasCopyRevision) {
-        worksheet.addConditionalFormatting({
-            ref: "$C:$C",
-            rules: [
-                {
-                    type: "expression",
-                    formulae: ["$C1<>$B1"],
-                    style: { font: { color: { argb: "FFFF3333" }, bold: true } },
-                },
-                {
-                    type: "expression",
-                    formulae: ["$C1<>$B1"],
-                    style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFCCCC" } } },
-                },
-            ],
-        })
-    }
+    addFormattingForCopyRevision(worksheet, "$C:$C", "$C1<>$B1")
 
     copyCol.alignment = copyAlignment
     revisionCol.alignment = copyAlignment
