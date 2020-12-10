@@ -186,7 +186,7 @@ const getRowCount = (text, colWidth) => {
 }
 
 const generateVerticalSheet = (workbook, worksheet) => {
-    const scale = 1.125
+    const scale = 2
     const scaledImgWidth = base64ImgList[0].width / scale
     const columnWidth = 80
     const heightUnit = 20
@@ -289,7 +289,8 @@ const extractText = (layer, i, exportable, x, y, width, height) => {
         if (!exportable && exportSliceOnly) {
             if (!getCopyExportState(layer)) return
         }
-        if (exportInViewOnly && (x > width || y > height)) return
+        if (exportInViewOnly && (x > width || y > height || x + layer.frame.width < 0 || y + layer.frame.height < 0))
+            return
         const storedKey = Settings.layerSettingForKey(layer, prefernceKey.KEY)
         const JSONPath = Settings.layerSettingForKey(layer, prefernceKey.JSON_PATH)
         switch (layer.type) {
@@ -306,7 +307,7 @@ const extractText = (layer, i, exportable, x, y, width, height) => {
                         copyList[i].push({
                             path: JSONPath ? JSONPath : null,
                             key: storedKey ? storedKey[j] : null,
-                            text: override.value,
+                            text: override.editable ? override.value : layer.master.overrides[j].value,
                         })
                 })
                 break
