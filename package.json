@@ -31,13 +31,12 @@
     "postinstall": "npm run build && skpm-link"
   },
   "devDependencies": {
-    "@skpm/builder": "^0.7.7"
+    "@skpm/builder": "^0.7.11"
   },
   "author": "Li Zheng",
   "dependencies": {
-    "@skpm/dialog": "^0.4.0",
+    "@skpm/dialog": "^0.4.1",
     "@skpm/fs": "^0.2.6",
-    "exceljs": "^4.2.0",
-    "ls-xlsx": "^0.11.5"
+    "exceljs": "^4.2.0"
   }
 }
