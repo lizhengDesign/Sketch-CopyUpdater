@@ -45,34 +45,6 @@ const imgBolder = {
 }
 const copyAlignment = { horizontal: "left", vertical: "middle", wrapText: true, indent: 2 }
 
-const addNote = (copyItem, copyCell) => {
-    if (copyItem.key) {
-        const pathList = copyItem.path ? copyItem.path.split("/") : undefined
-
-        if (pathList) {
-            copyCell.note = {
-                texts: [
-                    { font: { size: 12 }, text: "Source File: " },
-                    { font: { size: 12 }, text: pathList[pathList.length - 1] },
-                    { font: { size: 14 }, text: charNewLine },
-                    { font: { size: 14 }, text: charNewLine },
-                    { font: { size: 14, underline: "single", bold: true }, text: copyItem.key },
-                ],
-            }
-        } else {
-            copyCell.note = {
-                texts: [
-                    { font: { size: 12 }, text: "Source not found" },
-                    { font: { size: 14 }, text: charNewLine },
-                    { font: { size: 14 }, text: charNewLine },
-                    { font: { size: 14, underline: "single", bold: true }, text: copyItem.key },
-                ],
-            }
-        }
-        copyCell.note.margins = { insetmode: "custom", inset: [0.125, 0.5, 0.125, 0.5] }
-    }
-}
-
 const addFormattingForCopyRevision = (worksheet, ref, formulae) => {
     if (hasCopyRevision) {
         worksheet.addConditionalFormatting({
@@ -133,7 +105,6 @@ const generateHorizontalSheet = (workbook, worksheet) => {
             worksheet.getRow(j + 1).height = rowHeight
             copyCell.value = copyItem.text
             if (hasCopyRevision) revisionCell.value = j === 0 ? "Copy Revision" : copyItem.text
-            addNote(copyItem, copyCell)
         })
 
         imgCol.width = scaledImgWidth / 8
@@ -200,7 +171,6 @@ const generateVerticalSheet = (workbook, worksheet) => {
 
     worksheet.pageSetup = {
         orientation: "landscape",
-        // scale: Math.floor((hasCopyRevision ? columnWidth * 0.9 : columnWidth * 1.35) - scaledImgWidth / 16),
         fitToPage: true,
         fitToWidth: 1,
         fitToHeight: base64ImgList.length,
@@ -218,7 +188,6 @@ const generateVerticalSheet = (workbook, worksheet) => {
     base64ImgList.forEach((imgItem, i) => {
         const scaledImgHeight = scaledImgWidth * imgItem.ratio
         const minimumRowSteps = Math.ceil(scaledImgHeight / heightUnit / 1.25) + 1
-        const startingRow = currentRow
         const headerRow = worksheet.getRow(currentRow)
         headerRow.font = { bold: true, size: 20 }
         headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCCCCC" } }
@@ -242,21 +211,11 @@ const generateVerticalSheet = (workbook, worksheet) => {
             copyCell.value = copyItem.text
             if (hasCopyRevision) revisionCell.value = j == 0 ? "Copy Revision" : copyItem.text
             minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
-            addNote(copyItem, copyCell)
             currentRow++
         })
 
         currentRow = minimumRow > currentRow ? minimumRow : currentRow
         worksheet.getRow(currentRow).addPageBreak()
-        // worksheet.pageSetup.printArea += [
-        //     startingRow === 1 ? "" : "&&",
-        //     "A",
-        //     startingRow,
-        //     ":",
-        //     hasCopyRevision ? "C" : "B",
-        //     currentRow - 1,
-        // ].join("")
-
         currentRow++
     })
 
@@ -315,83 +274,6 @@ const getTransformedText = (rule, text) => {
             return text.toLowerCases()
         default:
             return text
-    }
-}
-
-const extractText = (layer, i, exportable, x, y, width, height) => {
-    if (layer.layers === undefined) {
-        if (layer.hidden) return
-        if (!exportable && exportSliceOnly) {
-            if (!getCopyExportState(layer)) return
-        }
-        if (exportInViewOnly && (x > width || y > height || x + layer.frame.width < 0 || y + layer.frame.height < 0))
-            return
-
-        const storedKey = Settings.layerSettingForKey(layer, prefernceKey.KEY)
-        const JSONPath = Settings.layerSettingForKey(layer, prefernceKey.JSON_PATH)
-
-        switch (layer.type) {
-            case layerType.TEXT:
-                copyList[i].push({
-                    path: JSONPath ? JSONPath : null,
-                    key: storedKey ? storedKey[0] : null,
-                    x: x,
-                    y: y,
-                    text: getTransformedText(layer.style.textTransform, layer.text),
-                })
-                break
-            case layerType.SYMBOLINSTANCE:
-                const dict = {}
-                layer.overrides.forEach((override, j) => {
-                    dict[override.path] = {
-                        x: parseFloat(override.affectedLayer.frame.x),
-                        y: parseFloat(override.affectedLayer.frame.y),
-                    }
-                    const lastSlashIndex = override.path.lastIndexOf("/")
-                    if (lastSlashIndex !== -1) {
-                        dict[override.path] = {
-                            x: dict[override.path].x + parseFloat(dict[override.path.substring(0, lastSlashIndex)].x),
-                            y: dict[override.path].y + parseFloat(dict[override.path.substring(0, lastSlashIndex)].y),
-                        }
-                    }
-                    const overrideX = x + dict[override.path].x
-                    const overrideY = y + dict[override.path].y
-                    if (override.property === "stringValue") {
-                        copyList[i].push({
-                            path: JSONPath ? JSONPath : null,
-                            key: storedKey ? storedKey[j] : null,
-                            x: x + overrideX,
-                            y: y + overrideY,
-                            text: override.editable
-                                ? getTransformedText(override.affectedLayer.style.textTransform, override.value)
-                                : getTransformedText(
-                                      override.affectedLayer.style.textTransform,
-                                      layer.master.overrides[j].value
-                                  ),
-                        })
-                    }
-                })
-                break
-        }
-    } else {
-        layer.layers.forEach((sublayer) => {
-            if (
-                !sublayer.hidden &&
-                sublayer.type !== layerType.SHAPEPATH &&
-                sublayer.type !== layerType.SLICE &&
-                sublayer.type !== layerType.SHAPE &&
-                sublayer.type !== layerType.HOTSPOT
-            )
-                extractText(
-                    sublayer,
-                    i,
-                    exportable || getCopyExportState(sublayer),
-                    x + sublayer.frame.x,
-                    y + sublayer.frame.y,
-                    width,
-                    height
-                )
-        })
     }
 }
 
@@ -496,7 +378,6 @@ export const generateExcel = async () => {
     const selectedArtboards = sortArtboardTBLR(selectedLayers.layers)
 
     const ExcelFilePath = dialog.showSaveDialogSync(doc, { filters: [{ extensions: ["xlsx"] }] })
-    // const ExcelFilePath = "/Users/li_zheng/Desktop/Untitiled.xlsx"
 
     if (ExcelFilePath) {
         UI.getInputFromUser(
@@ -525,15 +406,6 @@ export const generateExcel = async () => {
                         flattenGroup(tempArtboard)
                         extractCopy(tempArtboard, copyList.length - 1, layer.frame.width, layer.frame.height)
                         tempArtboard.remove()
-                        // extractText(
-                        //     layer,
-                        //     copyList.length - 1,
-                        //     exportSliceOnly ? getCopyExportState(layer) : true,
-                        //     0,
-                        //     0,
-                        //     layer.frame.width,
-                        //     layer.frame.height
-                        // )
                         copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
                     }
                 })
