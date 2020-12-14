@@ -10,6 +10,15 @@ A Sketch plugin that updates copy based on selected JSON
 
 ## How to use
 
+<ul>
+<li><a href="#1-link--pull">1. Link & Pull</a></li>
+<li><a href="#2-generate--push">2. Generate & Push</a></li>
+<li><a href="#3-check">3. Check</a></li>
+<li><a href="#4-truncation">4. Truncation</a></li>
+<li><a href="#5-generate-excel">5. Generate Excel</a></li>
+<li><a href="#6-remove-key">6. Remove Key</a></li>
+</ul>
+
 ### 1. Link & Pull
 
 Use @ to assign a key. The corresponding value will be retrieved after an update.
@@ -49,7 +58,13 @@ Use | to specify character count
 
 <img src="./instructions/truncationDemo.gif" alt="Truncation Demo" width="800">
 
-### Remove key
+### 5. Generate Excel
+
+Use Generate Excel to export selected artboards and the corresponding text into an Excel file. Use settings to modify the export range, layout orientations, and the visibility of a copy revision column.
+
+<img src="./instructions/exportDemo.gif" alt="Truncation Demo" width="800">
+
+### 6. Remove key
 
 use -@ to remove a key
 
