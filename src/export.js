@@ -5,6 +5,7 @@ const sketch = require("sketch")
 const ExcelJS = require("exceljs")
 const Settings = sketch.Settings
 const doc = sketch.getSelectedDocument()
+const creator = "Sketch Plugin: Copy Updater - " + doc.id
 const selectedLayers = doc.selectedLayers
 
 let base64ImgList = []
@@ -73,7 +74,7 @@ const getColLetterByNumber = (int) => {
     return col
 }
 
-const generateHorizontalSheet = (workbook, worksheet) => {
+const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
     const rowHeight = 40
 
     const colUnit = hasCopyRevision ? 4 : 3
@@ -91,20 +92,27 @@ const generateHorizontalSheet = (workbook, worksheet) => {
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCCCCC" } }
 
     base64ImgList.forEach((imgItem, i) => {
+        let copys = []
         const scaledImgWidth = imgItem.width / scale
-
+        const screenName = copyList[i][0].text
+        const tableName = ["\\", i + 1, "_", screenName.replace(/[^A-Z0-9]+/gi, "_")].join("")
         const imgCol = worksheet.getColumn(i * colUnit + 1)
         const copyCol = worksheet.getColumn(i * colUnit + 2)
         const revisionCol = worksheet.getColumn(i * colUnit + 3)
         const dividerCol = worksheet.getColumn(i * colUnit + colUnit)
 
-        worksheet.mergeCells(1, i * colUnit + 1, 1, i * colUnit + 2)
-        copyList[i].forEach((copyItem, j) => {
-            const copyCell = worksheet.getCell(j + 1, i * colUnit + 2)
-            const revisionCell = worksheet.getCell(j + 1, i * colUnit + 3)
-            worksheet.getRow(j + 1).height = rowHeight
-            copyCell.value = copyItem.text
-            if (hasCopyRevision) revisionCell.value = j === 0 ? "Copy Revision" : copyItem.text
+        copyList[i].slice(1).forEach((copyItem) => {
+            copys.push(hasCopyRevision ? [, copyItem.text, copyItem.text] : [, copyItem.text])
+        })
+
+        worksheet.addTable({
+            name: tableName,
+            ref: getColLetterByNumber(i * colUnit + 1) + 1,
+            headerRow: true,
+            columns: hasCopyRevision
+                ? [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }, { name: "Copy Revision" }]
+                : [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }],
+            rows: [...copys],
         })
 
         imgCol.width = scaledImgWidth / 8
@@ -147,6 +155,7 @@ const generateHorizontalSheet = (workbook, worksheet) => {
     })
 
     headerRow.font = { bold: true, size: 20 }
+    headerRow.alignment = { vertical: "middle" }
 }
 
 const getRowCount = (text, colWidth) => {
@@ -160,7 +169,7 @@ const getRowCount = (text, colWidth) => {
     return count
 }
 
-const generateVerticalSheet = (workbook, worksheet) => {
+const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
     const scaledImgWidth = base64ImgList[0].width / scale
     const columnWidth = 80
     const heightUnit = 20
@@ -186,13 +195,36 @@ const generateVerticalSheet = (workbook, worksheet) => {
     }
 
     base64ImgList.forEach((imgItem, i) => {
+        const screenName = copyList[i][0].text
+        const tableName = ["\\", i + 1, "_", screenName.replace(/[^A-Z0-9]+/gi, "_")].join("")
+        let copys = []
         const scaledImgHeight = scaledImgWidth * imgItem.ratio
-        const minimumRowSteps = Math.ceil(scaledImgHeight / heightUnit / 1.25) + 1
         const headerRow = worksheet.getRow(currentRow)
         headerRow.font = { bold: true, size: 20 }
         headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCCCCC" } }
 
-        worksheet.mergeCells(currentRow, 1, currentRow, 2)
+        let minimumRow = currentRow + Math.ceil(scaledImgHeight / heightUnit / 1.25)
+
+        copyList[i].slice(1).forEach((copyItem) => {
+            copys.push(hasCopyRevision ? [, copyItem.text, copyItem.text] : [, copyItem.text])
+            minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
+        })
+
+        let targetRow = minimumRow > currentRow + copys.length ? minimumRow : currentRow + copys.length
+        const additonalRows =
+            targetRow - currentRow - copys.length - 2 > 0 ? targetRow - currentRow - copys.length - 2 : 0
+        targetRow = additonalRows === 0 ? targetRow + 1 : targetRow
+
+        copys = copys.concat(new Array(additonalRows).fill(hasCopyRevision ? [, "", ""] : [, ""]))
+        worksheet.addTable({
+            name: tableName,
+            ref: "A" + currentRow,
+            headerRow: true,
+            columns: hasCopyRevision
+                ? [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }, { name: "Copy Revision" }]
+                : [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }],
+            rows: [...copys],
+        })
 
         const image = workbook.addImage({
             base64: imgItem.img,
@@ -203,44 +235,61 @@ const generateVerticalSheet = (workbook, worksheet) => {
             ext: { width: scaledImgWidth, height: scaledImgHeight },
         })
 
-        let minimumRow = currentRow + minimumRowSteps
+        imgCol.eachCell((cell) => (cell.name = "Print_Area"))
+        copyCol.eachCell((cell) => (cell.name = "Print_Area"))
+        if (hasCopyRevision) revisionCol.eachCell((cell) => (cell.name = "Print_Area"))
 
-        copyList[i].forEach((copyItem, j) => {
-            const copyCell = worksheet.getCell(currentRow, 2)
-            const revisionCell = worksheet.getCell(currentRow, 3)
-            copyCell.value = copyItem.text
-            if (hasCopyRevision) revisionCell.value = j == 0 ? "Copy Revision" : copyItem.text
-            minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
-            currentRow++
-        })
-
-        currentRow = minimumRow > currentRow ? minimumRow : currentRow
-        worksheet.getRow(currentRow).addPageBreak()
-        currentRow++
+        currentRow = targetRow + 1
     })
 
     addFormattingForCopyRevision(worksheet, "$C:$C", "$C1<>$B1")
 
-    copyCol.alignment = copyAlignment
-    revisionCol.alignment = copyAlignment
     imgCol.border = imgBolder
+    copyCol.alignment = copyAlignment
+    if (hasCopyRevision) revisionCol.alignment = copyAlignment
+}
+
+const readExcel = (path) => {
+    try {
+        const data = fs.readFileSync(path)
+        return data
+    } catch (error) {
+        return undefined
+    }
 }
 
 const saveAsExcel = async (ExcelFilePath) => {
     const date = new Date()
-    const sheetName = [date.getFullYear(), date.getMonth() + 1, date.getDate()].join("-")
-    const workbook = new ExcelJS.Workbook()
-    workbook.created = date
-    workbook.creator = "Sketch Plugin: Copy Updater"
+    const sheetName = `${date.getFullYear()}-${
+        date.getMonth() + 1
+    }-${date.getDate()} (${date.getHours()}-${date.getMinutes()}-${date.getSeconds()})`
+    let workbook = new ExcelJS.Workbook()
+    let isNew = true
+
+    const data = readExcel(ExcelFilePath)
+    if (data) await workbook.xlsx.load(data)
+    if (workbook.creator === creator) {
+        isNew = false
+    } else workbook = new ExcelJS.Workbook()
+
+    workbook.modified = date
+    workbook.creator = creator
 
     const worksheet = workbook.addWorksheet(sheetName)
 
+    if (!isNew) {
+        workbook.worksheets[0].tables = {}
+        workbook.definedNames.getMatrix("Print_Area").sheets = {}
+        workbook.eachSheet((sheet) => (sheet.orderNo = sheet === worksheet ? 0 : sheet.orderNo + 1))
+    }
+
     if (isHorizontal) {
-        generateHorizontalSheet(workbook, worksheet)
-    } else generateVerticalSheet(workbook, worksheet)
+        generateHorizontalSheet(workbook, worksheet, sheetName)
+    } else generateVerticalSheet(workbook, worksheet, sheetName)
 
     const buf = await workbook.xlsx.writeBuffer()
     fs.writeFileSync(ExcelFilePath, buf)
+    UI.message("🚀 Successfully Exported")
 }
 
 const getImgFromLayer = (layer) => {
@@ -303,8 +352,9 @@ const sortCopyTBLR = (copys) => {
     let sortedCopys = [...copys]
     for (let i = 1; i < sortedCopys.length - 1; i++) {
         for (let j = 1; j < sortedCopys.length - i; j++) {
-            if (sortedCopys[j].y > sortedCopys[j + 1].y) swapContentInArray(sortedCopys, j, j + 1)
-            else if (sortedCopys[j].y === sortedCopys[j + 1].y && sortedCopys[j].x > sortedCopys[j + 1].x) {
+            if (sortedCopys[j].y > sortedCopys[j + 1].y) {
+                swapContentInArray(sortedCopys, j, j + 1)
+            } else if (sortedCopys[j].y === sortedCopys[j + 1].y && sortedCopys[j].x > sortedCopys[j + 1].x) {
                 swapContentInArray(sortedCopys, j, j + 1)
             }
         }
