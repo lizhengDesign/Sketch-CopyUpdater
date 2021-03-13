@@ -30,11 +30,13 @@ const prefernceKey = {
     JSON_PATH: "lzhengCopyUPdaterJSONPath",
     EXPORT_ORIENTATION: "exportOrientation",
     EXPORT_SLICE_ONLY: "exportSliceOnly",
+    EXPORT_AT_COPY_COPY: "exportAtCopyOnly",
     HAS_COPY_REVISION: "hasCopyRevision",
     EXPORT_INVIEW_ONLY: "exportInViewOnly",
 }
 const charNewLine = String.fromCharCode(10)
 const exportSliceOnly = Settings.settingForKey(prefernceKey.EXPORT_SLICE_ONLY)
+const exportAtCopyOnly = Settings.settingForKey(prefernceKey.EXPORT_AT_COPY_COPY)
 const isHorizontal = Settings.settingForKey(prefernceKey.EXPORT_ORIENTATION) === 0
 const hasCopyRevision = Settings.settingForKey(prefernceKey.HAS_COPY_REVISION)
 const exportInViewOnly = Settings.settingForKey(prefernceKey.EXPORT_INVIEW_ONLY)
@@ -298,7 +300,11 @@ const getImgFromLayer = (layer) => {
     return base64Img
 }
 
-const getCopyExportState = (layer) => {
+const exportCopyByNamePrefix = (layer) => {
+    return layer.name.indexOf("@@") === 0
+}
+
+const exportCopyByExportState = (layer) => {
     if (layer.exportFormats.length > 0) {
         let exportable = false
         layer.exportFormats.forEach((slice) => {
@@ -371,7 +377,8 @@ const extractCopy = (artboard, i, width, height) => {
                     layer.frame.y > height ||
                     layer.frame.x + layer.frame.width < 0 ||
                     layer.frame.y + layer.frame.height < 0)) ||
-            (exportSliceOnly && !getCopyExportState(layer))
+            (exportSliceOnly && !exportCopyByExportState(layer)) ||
+            (exportAtCopyOnly && !exportCopyByNamePrefix(layer))
         )
             return
 
@@ -398,14 +405,15 @@ const flattenGroup = (group) => {
                     if (symbolGroup === null) {
                         layer.remove()
                     } else {
-                        if (exportSliceOnly && getCopyExportState(layer))
+                        if (exportSliceOnly && exportCopyByExportState(layer))
                             symbolGroup.layers.forEach((sublayer) => setCopyExportState(sublayer, true))
+                        if (exportAtCopyOnly && !exportCopyByNamePrefix(layer)) symbolGroup.remove()
                         symbolGroup.sketchObject.ungroup()
                         isFlat = false
                     }
                     break
                 case layerType.GROUP:
-                    if (exportSliceOnly && getCopyExportState(layer))
+                    if (exportSliceOnly && exportCopyByExportState(layer))
                         layer.layers.forEach((sublayer) => setCopyExportState(sublayer, true))
                     layer.sketchObject.ungroup()
                     isFlat = false
@@ -433,9 +441,9 @@ export const generateExcel = async () => {
         UI.getInputFromUser(
             "What's the image scale do you want to export?",
             {
-                initialValue: "1",
+                initialValue: "1x",
                 type: UI.INPUT_TYPE.selection,
-                possibleValues: ["0.25", "0.5", "0.75", "1"],
+                possibleValues: ["0.25x", "0.5x", "0.75x", "1x"],
                 description: "Depends on the amount of text, it may take a few seconds...",
             },
             (err, value) => {

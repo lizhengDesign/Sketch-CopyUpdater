@@ -12,12 +12,13 @@ const prefernceKey = {
     HAS_EDITABLE_ONLY_SELECTED: "hasExportEditableOnlySelected",
     EXPORT_ORIENTATION: "exportOrientation",
     EXPORT_SLICE_ONLY: "exportSliceOnly",
+    EXPORT_AT_COPY_ONLY: "exportAtCopyOnly",
     EXPORT_INVIEW_ONLY: "exportInViewOnly",
     HAS_COPY_REVISION: "hasCopyRevision",
 }
 const panelSpec = {
     width: 300,
-    height: 305,
+    height: 335,
     lineHeight: 25,
 }
 const checkScopeOptions = ["Selected page", 'Pages starting with "@"', "Entire document"]
@@ -27,6 +28,7 @@ let checkCopyToggle,
     copyDocumentationToggle,
     exportAllStringsToggle,
     exportSliceOnlyToggle,
+    exportAtCopyOnlyToggle,
     exportInViewOnlyToggle,
     copyRevisionToggle,
     checkScopeDropdown,
@@ -46,7 +48,7 @@ const createLabel = (positionY, text) => {
 
 const createToggle = (positionY, settingKey, text) => {
     const toggle = NSButton.alloc().initWithFrame(UIComponentRect(positionY))
-    const initValue = Settings.settingForKey(settingKey) == 0 ? NSOffState : NSOnState
+    const initValue = Settings.settingForKey(settingKey) === 1 ? NSOnState : NSOffState
 
     toggle.setButtonType(NSSwitchButton)
     toggle.setBezelStyle(0)
@@ -93,26 +95,32 @@ export const createSettingPanel = () => {
         prefernceKey.EXPORT_SLICE_ONLY,
         "Only export slices with 'copy' as Prefix or Suffix"
     )
-    exportInViewOnlyToggle = createToggle(
+    exportAtCopyOnlyToggle = createToggle(
         165,
+        prefernceKey.EXPORT_AT_COPY_ONLY,
+        "Only export layers with '@@' as name prefix"
+    )
+    exportInViewOnlyToggle = createToggle(
+        185,
         prefernceKey.EXPORT_INVIEW_ONLY,
         "Only export content appearing in the artboards"
     )
-    copyRevisionToggle = createToggle(185, prefernceKey.HAS_COPY_REVISION, "Add a copy revision column")
+    copyRevisionToggle = createToggle(205, prefernceKey.HAS_COPY_REVISION, "Add a copy revision column")
 
-    let otherLabel = createLabel(235, "Other settings:")
-    checkCopyToggle = createToggle(255, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
+    let otherLabel = createLabel(255, "Other settings:")
+    checkCopyToggle = createToggle(275, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
     exportAllStringsToggle = createToggle(
-        275,
+        295,
         prefernceKey.HAS_EDITABLE_ONLY_SELECTED,
         "Only export editable text to JSON"
     )
-    copyDocumentationToggle = createToggle(295, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
+    copyDocumentationToggle = createToggle(315, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
 
     view.addSubview(checkScopeLabel)
     view.addSubview(checkScopeDropdown)
 
     view.addSubview(exportSliceOnlyToggle)
+    view.addSubview(exportAtCopyOnlyToggle)
     view.addSubview(exportInViewOnlyToggle)
     view.addSubview(copyRevisionToggle)
     view.addSubview(exportOrientationLabel)
@@ -131,6 +139,7 @@ export const updateSettings = () => {
     const orientation = exportOrientationDropdown.indexOfSelectedItem()
     Settings.setSettingForKey(prefernceKey.CHECK_SCOPE, checkScope)
     Settings.setSettingForKey(prefernceKey.EXPORT_SLICE_ONLY, exportSliceOnlyToggle.state())
+    Settings.setSettingForKey(prefernceKey.EXPORT_AT_COPY_ONLY, exportAtCopyOnlyToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_INVIEW_ONLY, exportInViewOnlyToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_COPY_REVISION, copyRevisionToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_ORIENTATION, orientation)
