@@ -15,10 +15,12 @@ const prefernceKey = {
     EXPORT_AT_COPY_ONLY: "exportAtCopyOnly",
     EXPORT_INVIEW_ONLY: "exportInViewOnly",
     HAS_COPY_REVISION: "hasCopyRevision",
+    HAS_COPY_INDEX: "hasCopyIndex",
+    HAS_COPY_KEY: "hasCopyKey",
 }
 const panelSpec = {
     width: 300,
-    height: 335,
+    height: 375,
     lineHeight: 25,
 }
 const checkScopeOptions = ["Selected page", 'Pages starting with "@"', "Entire document"]
@@ -31,6 +33,8 @@ let checkCopyToggle,
     exportAtCopyOnlyToggle,
     exportInViewOnlyToggle,
     copyRevisionToggle,
+    copyIndexToggle,
+    copyKeyToggle,
     checkScopeDropdown,
     exportOrientationDropdown
 
@@ -77,44 +81,67 @@ export const createSettingPanel = () => {
     const view = NSView.alloc().initWithFrame(NSMakeRect(0, 0, panelSpec.width, panelSpec.height))
     panel.addAccessoryView(view)
 
-    let checkScopeLabel = createLabel(30, "Copy check scope:")
+    let y = 0
+
+    // -------------------------------------------------
+    //  Check Scope
+    // -------------------------------------------------
+    y += 30
+    let checkScopeLabel = createLabel(y, "Copy check scope:")
+    y += 20
     checkScopeDropdown = createDropdown(
-        50,
+        y,
         checkScopeOptions,
         checkScopeOptions[Settings.settingForKey(prefernceKey.CHECK_SCOPE)]
     )
 
-    let exportOrientationLabel = createLabel(100, "Excel settings:")
+    // -------------------------------------------------
+    //  Excel
+    // -------------------------------------------------
+    y += 50
+    let exportOrientationLabel = createLabel(y, "Excel settings:")
+    y += 20
     exportOrientationDropdown = createDropdown(
-        120,
+        y,
         exportOrientationOptions,
         exportOrientationOptions[Settings.settingForKey(prefernceKey.EXPORT_ORIENTATION)]
     )
+    y += 25
     exportSliceOnlyToggle = createToggle(
-        145,
+        y,
         prefernceKey.EXPORT_SLICE_ONLY,
         "Only export slices with 'copy' as Prefix or Suffix"
     )
+    y += 20
     exportAtCopyOnlyToggle = createToggle(
-        165,
+        y,
         prefernceKey.EXPORT_AT_COPY_ONLY,
         "Only export layers with '@@' as name prefix"
     )
-    exportInViewOnlyToggle = createToggle(
-        185,
-        prefernceKey.EXPORT_INVIEW_ONLY,
-        "Only export content appearing in the artboards"
-    )
-    copyRevisionToggle = createToggle(205, prefernceKey.HAS_COPY_REVISION, "Add a copy revision column")
+    y += 20
+    exportInViewOnlyToggle = createToggle(y, prefernceKey.EXPORT_INVIEW_ONLY, "Ignore content outside of artboards")
+    y += 20
+    copyIndexToggle = createToggle(y, prefernceKey.HAS_COPY_INDEX, "Add markers on the screen and an index column")
+    y += 20
+    copyKeyToggle = createToggle(y, prefernceKey.HAS_COPY_KEY, "Add a copy name column")
+    y += 20
+    copyRevisionToggle = createToggle(y, prefernceKey.HAS_COPY_REVISION, "Add a copy revision column")
 
-    let otherLabel = createLabel(255, "Other settings:")
-    checkCopyToggle = createToggle(275, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
+    // -------------------------------------------------
+    //  Other
+    // -------------------------------------------------
+    y += 50
+    let otherLabel = createLabel(y, "Other settings:")
+    y += 20
+    checkCopyToggle = createToggle(y, prefernceKey.IS_CHECK, "Check copy when open a Sketch document")
+    y += 20
     exportAllStringsToggle = createToggle(
-        295,
+        y,
         prefernceKey.HAS_EDITABLE_ONLY_SELECTED,
         "Only export editable text to JSON"
     )
-    copyDocumentationToggle = createToggle(315, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
+    y += 20
+    copyDocumentationToggle = createToggle(y, prefernceKey.HAS_DOCUMENTATION, "Maintain a copy index page")
 
     view.addSubview(checkScopeLabel)
     view.addSubview(checkScopeDropdown)
@@ -122,6 +149,8 @@ export const createSettingPanel = () => {
     view.addSubview(exportSliceOnlyToggle)
     view.addSubview(exportAtCopyOnlyToggle)
     view.addSubview(exportInViewOnlyToggle)
+    view.addSubview(copyIndexToggle)
+    view.addSubview(copyKeyToggle)
     view.addSubview(copyRevisionToggle)
     view.addSubview(exportOrientationLabel)
     view.addSubview(exportOrientationDropdown)
@@ -141,6 +170,8 @@ export const updateSettings = () => {
     Settings.setSettingForKey(prefernceKey.EXPORT_SLICE_ONLY, exportSliceOnlyToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_AT_COPY_ONLY, exportAtCopyOnlyToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_INVIEW_ONLY, exportInViewOnlyToggle.state())
+    Settings.setSettingForKey(prefernceKey.HAS_COPY_INDEX, copyIndexToggle.state())
+    Settings.setSettingForKey(prefernceKey.HAS_COPY_KEY, copyKeyToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_COPY_REVISION, copyRevisionToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_ORIENTATION, orientation)
     Settings.setSettingForKey(prefernceKey.IS_CHECK, checkCopyToggle.state())

@@ -33,6 +33,8 @@ const prefernceKey = {
     EXPORT_SLICE_ONLY: "exportSliceOnly",
     EXPORT_AT_COPY_COPY: "exportAtCopyOnly",
     HAS_COPY_REVISION: "hasCopyRevision",
+    HAS_COPY_INDEX: "hasCopyIndex",
+    HAS_COPY_KEY: "hasCopyKey",
     EXPORT_INVIEW_ONLY: "exportInViewOnly",
 }
 const charNewLine = String.fromCharCode(10)
@@ -40,7 +42,10 @@ const exportSliceOnly = Settings.settingForKey(prefernceKey.EXPORT_SLICE_ONLY)
 const exportAtCopyOnly = Settings.settingForKey(prefernceKey.EXPORT_AT_COPY_COPY)
 const isHorizontal = Settings.settingForKey(prefernceKey.EXPORT_ORIENTATION) === 0
 const hasCopyRevision = Settings.settingForKey(prefernceKey.HAS_COPY_REVISION)
+const hasCopyIndex = Settings.settingForKey(prefernceKey.HAS_COPY_INDEX)
+const hasCopyKey = Settings.settingForKey(prefernceKey.HAS_COPY_KEY)
 const exportInViewOnly = Settings.settingForKey(prefernceKey.EXPORT_INVIEW_ONLY)
+const columnCount = 2 + (hasCopyIndex ? 1 : 0) + (hasCopyKey ? 1 : 0) + (hasCopyRevision ? 1 : 0)
 
 const imgBolder = {
     bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
@@ -77,10 +82,27 @@ const getColLetterByNumber = (int) => {
     return col
 }
 
+const getCopyContent = (copyItem, index) => {
+    const copyContent = [null]
+    if (hasCopyIndex) copyContent.push(index + 1)
+    if (hasCopyKey) copyContent.push(copyItem.key)
+    copyContent.push(copyItem.text)
+    if (hasCopyRevision) copyContent.push(copyItem.text)
+    return copyContent
+}
+
+const getColumns = (i, screenName, currentCopyTitle) => {
+    const columns = [{ name: `${i + 1}. ${screenName}` }]
+    if (hasCopyIndex) columns.push({ name: "Id" })
+    if (hasCopyKey) columns.push({ name: "Key" })
+    columns.push({ name: currentCopyTitle })
+    if (hasCopyRevision) columns.push({ name: "Copy Revision" })
+    return columns
+}
+
 const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
     const rowHeight = 40
-
-    const colUnit = hasCopyRevision ? 6 : 5
+    const vColumnCount = columnCount + 1 // + divider
 
     worksheet.properties.defaultRowHeight = rowHeight
     worksheet.views = [{ state: "frozen", ySplit: 1 }]
@@ -99,53 +121,46 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
         const scaledImgWidth = imgItem.width / scale
         const screenName = copyList[i][0].text
         const tableName = ["\\", i + 1, "_", screenName.replace(/[^A-Z0-9]+/gi, "_")].join("")
-        const imgCol = worksheet.getColumn(i * colUnit + 1)
-        const indexCol = worksheet.getColumn(i * colUnit + 2)
-        const keyCol = worksheet.getColumn(i * colUnit + 3)
-        const copyCol = worksheet.getColumn(i * colUnit + 4)
-        const revisionCol = worksheet.getColumn(i * colUnit + 5)
-        const dividerCol = worksheet.getColumn(i * colUnit + colUnit)
+        let colIndex = 0
+        const imgCol = worksheet.getColumn(i * vColumnCount + ++colIndex)
+        const indexCol = hasCopyIndex ? worksheet.getColumn(i * vColumnCount + ++colIndex) : null
+        const keyCol = hasCopyKey ? worksheet.getColumn(i * vColumnCount + ++colIndex) : null
+        const copyCol = worksheet.getColumn(i * vColumnCount + ++colIndex)
+        const revisionCol = hasCopyRevision ? worksheet.getColumn(i * vColumnCount + ++colIndex) : null
+        const dividerCol = worksheet.getColumn(i * vColumnCount + ++colIndex)
 
         copyList[i].slice(1).forEach((copyItem, index) => {
-            copys.push(
-                hasCopyRevision
-                    ? [, index + 1, copyItem.key, copyItem.text, copyItem.text]
-                    : [, index + 1, copyItem.key, copyItem.text]
-            )
+            copys.push(getCopyContent(copyItem, index))
         })
 
-        const coloumns = [
-            { name: `${i + 1}. ${screenName}` },
-            { name: "Id" },
-            { name: "Key" },
-            { name: currentCopyTitle },
-        ]
+        const columns = getColumns(i, screenName, currentCopyTitle)
 
         worksheet.addTable({
             name: tableName,
-            ref: getColLetterByNumber(i * colUnit + 1) + 1,
+            ref: getColLetterByNumber(i * vColumnCount + 1) + 1,
             headerRow: true,
-            columns: hasCopyRevision ? [...coloumns, { name: "Copy Revision" }] : [...coloumns],
+            columns: [...columns],
             rows: [...copys],
         })
 
         imgCol.width = scaledImgWidth / 8
-        indexCol.width = 15
-        indexCol.font = { size: 14 }
-        indexCol.alignment = copyAlignment
-        keyCol.width = 30
-        keyCol.font = { size: 14 }
-        keyCol.alignment = copyAlignment
+        imgCol.border = imgBolder
+        if (hasCopyIndex) {
+            indexCol.width = 10
+            indexCol.font = { size: 14 }
+            indexCol.alignment = copyAlignment
+        }
+        if (hasCopyKey) {
+            keyCol.width = 30
+            keyCol.font = { size: 14 }
+            keyCol.alignment = copyAlignment
+        }
         copyCol.width = 60
         copyCol.font = { size: 14 }
         copyCol.alignment = copyAlignment
-        dividerCol.width = 4
-        dividerCol.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF999999" } }
-        imgCol.border = imgBolder
         copyCol.border = {
             right: { style: "think", color: { argb: "FFFFFFFF" } },
         }
-
         if (hasCopyRevision) {
             revisionCol.width = 60
             revisionCol.font = { size: 14, color: { argb: "FFBBBBBB" } }
@@ -153,14 +168,16 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
             revisionCol.border = {
                 right: { style: "think", color: { argb: "FFFFFFFF" } },
             }
-            const copyColLetter = getColLetterByNumber(i * colUnit + 4)
-            const revisionColLetter = getColLetterByNumber(i * colUnit + 5)
+            const copyColLetter = getColLetterByNumber((i + 1) * vColumnCount - 2)
+            const revisionColLetter = getColLetterByNumber((i + 1) * vColumnCount - 1)
             addFormattingForCopyRevision(
                 worksheet,
                 "$" + revisionColLetter + ":$" + revisionColLetter,
                 "$" + revisionColLetter + "1<>$" + copyColLetter + "1"
             )
         }
+        dividerCol.width = 4
+        dividerCol.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF999999" } }
 
         const scaledImgHeight = scaledImgWidth * imgItem.ratio
 
@@ -169,8 +186,8 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
             extension: "jpeg",
         })
         worksheet.addImage(image, {
-            tl: { col: i * colUnit, row: 1 },
-            br: { col: i * colUnit + 1, row: scaledImgHeight / rowHeight / 1.25 },
+            tl: { col: i * vColumnCount, row: 1 },
+            br: { col: i * vColumnCount + 1, row: scaledImgHeight / rowHeight / 1.25 },
         })
     })
 
@@ -193,11 +210,12 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
     const scaledImgWidth = base64ImgList[0].width / scale
     const columnWidth = 80
     const heightUnit = 20
-    const imgCol = worksheet.getColumn(1)
-    const indexCol = worksheet.getColumn(2)
-    const keyCol = worksheet.getColumn(3)
-    const copyCol = worksheet.getColumn(4)
-    const revisionCol = worksheet.getColumn(5)
+    let colIndex = 0
+    const imgCol = worksheet.getColumn(++colIndex)
+    const indexCol = hasCopyIndex ? worksheet.getColumn(++colIndex) : null
+    const keyCol = hasCopyKey ? worksheet.getColumn(++colIndex) : null
+    const copyCol = worksheet.getColumn(++colIndex)
+    const revisionCol = hasCopyRevision ? worksheet.getColumn(++colIndex) : null
     let currentRow = 1
 
     worksheet.pageSetup = {
@@ -210,16 +228,32 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
 
     const fontStyle = { size: 14 }
 
-    indexCol.width = columnWidth / 8
-    indexCol.font = fontStyle
-    keyCol.width = columnWidth / 2
-    keyCol.font = fontStyle
+    imgCol.width = scaledImgWidth / 8
+    imgCol.border = imgBolder
+    if (hasCopyIndex) {
+        indexCol.width = columnWidth / 8
+        indexCol.font = fontStyle
+        indexCol.alignment = copyAlignment
+    }
+    if (hasCopyKey) {
+        keyCol.width = columnWidth / 2
+        keyCol.font = fontStyle
+        keyCol.alignment = copyAlignment
+    }
     copyCol.width = columnWidth
     copyCol.font = fontStyle
-    imgCol.width = scaledImgWidth / 8
+    copyCol.alignment = copyAlignment
     if (hasCopyRevision) {
         revisionCol.width = columnWidth
         revisionCol.font = { size: 14, color: { argb: "FFBBBBBB" } }
+        revisionCol.alignment = copyAlignment
+        const copyColLetter = getColLetterByNumber(columnCount - 1)
+        const copyRevisionColLetter = getColLetterByNumber(columnCount)
+        addFormattingForCopyRevision(
+            worksheet,
+            `$${copyRevisionColLetter}:$${copyRevisionColLetter}`,
+            `$${copyRevisionColLetter}1<>$${copyColLetter}1`
+        )
     }
 
     base64ImgList.forEach((imgItem, i) => {
@@ -234,11 +268,7 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         let minimumRow = currentRow + Math.ceil(scaledImgHeight / heightUnit / 1.25)
 
         copyList[i].slice(1).forEach((copyItem, index) => {
-            copys.push(
-                hasCopyRevision
-                    ? [, index + 1, copyItem.key, copyItem.text, copyItem.text]
-                    : [, index + 1, copyItem.key, copyItem.text]
-            )
+            copys.push(getCopyContent(copyItem, index))
             minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
         })
 
@@ -247,18 +277,14 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
             targetRow - currentRow - copys.length - 2 > 0 ? targetRow - currentRow - copys.length - 2 : 0
         targetRow = additonalRows === 0 ? targetRow + 1 : targetRow
 
-        copys = copys.concat(new Array(additonalRows).fill(hasCopyRevision ? [, "", "", "", ""] : [, "", "", ""]))
-        const coloumns = [
-            { name: `${i + 1}. ${screenName}` },
-            { name: "Id" },
-            { name: "Key" },
-            { name: currentCopyTitle },
-        ]
+        copys = copys.concat(new Array(additonalRows).fill(new Array(columnCount).fill("")))
+        const columns = getColumns(i, screenName, currentCopyTitle)
+
         worksheet.addTable({
             name: tableName,
             ref: "A" + currentRow,
             headerRow: true,
-            columns: hasCopyRevision ? [...coloumns, { name: "Copy Revision" }] : [...coloumns],
+            columns: [...columns],
             rows: [...copys],
         })
 
@@ -272,21 +298,13 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         })
 
         imgCol.eachCell((cell) => (cell.name = "Print_Area"))
-        indexCol.eachCell((cell) => (cell.name = "Print_Area"))
-        keyCol.eachCell((cell) => (cell.name = "Print_Area"))
+        if (hasCopyIndex) indexCol.eachCell((cell) => (cell.name = "Print_Area"))
+        if (hasCopyKey) keyCol.eachCell((cell) => (cell.name = "Print_Area"))
         copyCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyRevision) revisionCol.eachCell((cell) => (cell.name = "Print_Area"))
 
         currentRow = targetRow + 1
     })
-
-    addFormattingForCopyRevision(worksheet, "$E:$E", "$E1<>$D1")
-
-    imgCol.border = imgBolder
-    indexCol.alignment = copyAlignment
-    keyCol.alignment = copyAlignment
-    copyCol.alignment = copyAlignment
-    if (hasCopyRevision) revisionCol.alignment = copyAlignment
 }
 
 const readExcel = (path) => {
@@ -557,16 +575,23 @@ export const generateExcel = async () => {
                 if (err) return
 
                 scale = 1 / parseFloat(value)
-                const symbolPage = sketch.Page.getSymbolsPage(doc) || sketch.Page.createSymbolsPage()
-                symbolPage.parent = doc
-                const indexMarkerList = sketch.find(
-                    `${layerType.SYMBOLMASTER}, [name="${indexMarkerName}"]`,
-                    symbolPage
-                )
-                const indexMarkerMaster =
-                    indexMarkerList.length > 0 ? indexMarkerList[0] : createIndexMarker(sketch.Page.getSymbolsPage(doc))
-                const tempPage = new sketch.Page({ name: "temp" })
-                tempPage.parent = doc
+
+                let indexMarkerMaster
+                let tempPage
+                if (hasCopyIndex) {
+                    const symbolPage = sketch.Page.getSymbolsPage(doc) || sketch.Page.createSymbolsPage()
+                    symbolPage.parent = doc
+                    const indexMarkerList = sketch.find(
+                        `${layerType.SYMBOLMASTER}, [name="${indexMarkerName}"]`,
+                        symbolPage
+                    )
+                    indexMarkerMaster =
+                        indexMarkerList.length > 0
+                            ? indexMarkerList[0]
+                            : createIndexMarker(sketch.Page.getSymbolsPage(doc))
+                    tempPage = new sketch.Page({ name: "temp" })
+                    tempPage.parent = doc
+                }
 
                 selectedArtboards.forEach((artboard) => {
                     if (artboard.type === layerType.ARTBOARD) {
@@ -577,13 +602,15 @@ export const generateExcel = async () => {
                         extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
                         copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
 
-                        const tempArtboardIndex = createCloneWithBorder(tempPage, artboard, indexMarkerMaster)
+                        const tempArtboardImgSource = hasCopyIndex
+                            ? createCloneWithBorder(tempPage, artboard, indexMarkerMaster)
+                            : artboard.duplicate()
 
-                        if (indexMarkerMaster !== null) {
+                        if (hasCopyIndex) {
                             copyList[copyList.length - 1].forEach((copyInfo, index) => {
                                 if (index === 0) return
                                 const marker = indexMarkerMaster.createNewInstance()
-                                marker.parent = tempArtboardIndex
+                                marker.parent = tempArtboardImgSource
                                 marker.overrides.forEach((override) => {
                                     if (override.property == "stringValue") override.value = index
                                 })
@@ -593,16 +620,16 @@ export const generateExcel = async () => {
                         }
 
                         base64ImgList.push({
-                            img: getImgFromLayer(tempArtboardIndex),
-                            width: tempArtboardIndex.frame.width,
-                            ratio: tempArtboardIndex.frame.height / tempArtboardIndex.frame.width,
+                            img: getImgFromLayer(tempArtboardImgSource),
+                            width: tempArtboardImgSource.frame.width,
+                            ratio: tempArtboardImgSource.frame.height / tempArtboardImgSource.frame.width,
                         })
 
                         tempArtboardCopy.remove()
-                        tempArtboardIndex.remove()
+                        tempArtboardImgSource.remove()
                     }
                 })
-                tempPage.remove()
+                if (hasCopyIndex) tempPage.remove()
                 if (base64ImgList.length > 0) saveAsExcel(ExcelFilePath)
             }
         )
