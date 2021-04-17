@@ -37,6 +37,7 @@
   "dependencies": {
     "@skpm/dialog": "^0.4.1",
     "@skpm/fs": "^0.2.6",
-    "exceljs": "^4.2.0"
+    "exceljs": "^4.2.0",
+    "url-parse": "^1.5.1"
   }
 }

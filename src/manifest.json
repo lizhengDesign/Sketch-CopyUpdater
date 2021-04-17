@@ -1,6 +1,6 @@
 {
   "name": "Copy Updater",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "identifier": "com.lzheng.copy-updater",
   "icon": "icon.png",
   "commands": [

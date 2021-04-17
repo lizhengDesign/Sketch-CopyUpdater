@@ -7,6 +7,7 @@ const Settings = sketch.Settings
 const doc = sketch.getSelectedDocument()
 const creator = "Sketch Plugin: Copy Updater - " + doc.id
 const selectedLayers = doc.selectedLayers
+const indexMarkerName = "@indexMarker"
 
 let base64ImgList = []
 let copyList = []
@@ -79,7 +80,7 @@ const getColLetterByNumber = (int) => {
 const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
     const rowHeight = 40
 
-    const colUnit = hasCopyRevision ? 4 : 3
+    const colUnit = hasCopyRevision ? 6 : 5
 
     worksheet.properties.defaultRowHeight = rowHeight
     worksheet.views = [{ state: "frozen", ySplit: 1 }]
@@ -99,25 +100,42 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
         const screenName = copyList[i][0].text
         const tableName = ["\\", i + 1, "_", screenName.replace(/[^A-Z0-9]+/gi, "_")].join("")
         const imgCol = worksheet.getColumn(i * colUnit + 1)
-        const copyCol = worksheet.getColumn(i * colUnit + 2)
-        const revisionCol = worksheet.getColumn(i * colUnit + 3)
+        const indexCol = worksheet.getColumn(i * colUnit + 2)
+        const keyCol = worksheet.getColumn(i * colUnit + 3)
+        const copyCol = worksheet.getColumn(i * colUnit + 4)
+        const revisionCol = worksheet.getColumn(i * colUnit + 5)
         const dividerCol = worksheet.getColumn(i * colUnit + colUnit)
 
-        copyList[i].slice(1).forEach((copyItem) => {
-            copys.push(hasCopyRevision ? [, copyItem.text, copyItem.text] : [, copyItem.text])
+        copyList[i].slice(1).forEach((copyItem, index) => {
+            copys.push(
+                hasCopyRevision
+                    ? [, index + 1, copyItem.key, copyItem.text, copyItem.text]
+                    : [, index + 1, copyItem.key, copyItem.text]
+            )
         })
+
+        const coloumns = [
+            { name: `${i + 1}. ${screenName}` },
+            { name: "Id" },
+            { name: "Key" },
+            { name: currentCopyTitle },
+        ]
 
         worksheet.addTable({
             name: tableName,
             ref: getColLetterByNumber(i * colUnit + 1) + 1,
             headerRow: true,
-            columns: hasCopyRevision
-                ? [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }, { name: "Copy Revision" }]
-                : [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }],
+            columns: hasCopyRevision ? [...coloumns, { name: "Copy Revision" }] : [...coloumns],
             rows: [...copys],
         })
 
         imgCol.width = scaledImgWidth / 8
+        indexCol.width = 15
+        indexCol.font = { size: 14 }
+        indexCol.alignment = copyAlignment
+        keyCol.width = 30
+        keyCol.font = { size: 14 }
+        keyCol.alignment = copyAlignment
         copyCol.width = 60
         copyCol.font = { size: 14 }
         copyCol.alignment = copyAlignment
@@ -135,8 +153,8 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
             revisionCol.border = {
                 right: { style: "think", color: { argb: "FFFFFFFF" } },
             }
-            const copyColLetter = getColLetterByNumber(i * colUnit + 2)
-            const revisionColLetter = getColLetterByNumber(i * colUnit + 3)
+            const copyColLetter = getColLetterByNumber(i * colUnit + 4)
+            const revisionColLetter = getColLetterByNumber(i * colUnit + 5)
             addFormattingForCopyRevision(
                 worksheet,
                 "$" + revisionColLetter + ":$" + revisionColLetter,
@@ -176,8 +194,10 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
     const columnWidth = 80
     const heightUnit = 20
     const imgCol = worksheet.getColumn(1)
-    const copyCol = worksheet.getColumn(2)
-    const revisionCol = worksheet.getColumn(3)
+    const indexCol = worksheet.getColumn(2)
+    const keyCol = worksheet.getColumn(3)
+    const copyCol = worksheet.getColumn(4)
+    const revisionCol = worksheet.getColumn(5)
     let currentRow = 1
 
     worksheet.pageSetup = {
@@ -188,8 +208,14 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         printArea: "",
     }
 
+    const fontStyle = { size: 14 }
+
+    indexCol.width = columnWidth / 8
+    indexCol.font = fontStyle
+    keyCol.width = columnWidth / 2
+    keyCol.font = fontStyle
     copyCol.width = columnWidth
-    copyCol.font = { size: 14 }
+    copyCol.font = fontStyle
     imgCol.width = scaledImgWidth / 8
     if (hasCopyRevision) {
         revisionCol.width = columnWidth
@@ -207,8 +233,12 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
 
         let minimumRow = currentRow + Math.ceil(scaledImgHeight / heightUnit / 1.25)
 
-        copyList[i].slice(1).forEach((copyItem) => {
-            copys.push(hasCopyRevision ? [, copyItem.text, copyItem.text] : [, copyItem.text])
+        copyList[i].slice(1).forEach((copyItem, index) => {
+            copys.push(
+                hasCopyRevision
+                    ? [, index + 1, copyItem.key, copyItem.text, copyItem.text]
+                    : [, index + 1, copyItem.key, copyItem.text]
+            )
             minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
         })
 
@@ -217,14 +247,18 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
             targetRow - currentRow - copys.length - 2 > 0 ? targetRow - currentRow - copys.length - 2 : 0
         targetRow = additonalRows === 0 ? targetRow + 1 : targetRow
 
-        copys = copys.concat(new Array(additonalRows).fill(hasCopyRevision ? [, "", ""] : [, ""]))
+        copys = copys.concat(new Array(additonalRows).fill(hasCopyRevision ? [, "", "", "", ""] : [, "", "", ""]))
+        const coloumns = [
+            { name: `${i + 1}. ${screenName}` },
+            { name: "Id" },
+            { name: "Key" },
+            { name: currentCopyTitle },
+        ]
         worksheet.addTable({
             name: tableName,
             ref: "A" + currentRow,
             headerRow: true,
-            columns: hasCopyRevision
-                ? [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }, { name: "Copy Revision" }]
-                : [{ name: `${i + 1}. ${screenName}` }, { name: currentCopyTitle }],
+            columns: hasCopyRevision ? [...coloumns, { name: "Copy Revision" }] : [...coloumns],
             rows: [...copys],
         })
 
@@ -238,15 +272,19 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         })
 
         imgCol.eachCell((cell) => (cell.name = "Print_Area"))
+        indexCol.eachCell((cell) => (cell.name = "Print_Area"))
+        keyCol.eachCell((cell) => (cell.name = "Print_Area"))
         copyCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyRevision) revisionCol.eachCell((cell) => (cell.name = "Print_Area"))
 
         currentRow = targetRow + 1
     })
 
-    addFormattingForCopyRevision(worksheet, "$C:$C", "$C1<>$B1")
+    addFormattingForCopyRevision(worksheet, "$E:$E", "$E1<>$D1")
 
     imgCol.border = imgBolder
+    indexCol.alignment = copyAlignment
+    keyCol.alignment = copyAlignment
     copyCol.alignment = copyAlignment
     if (hasCopyRevision) revisionCol.alignment = copyAlignment
 }
@@ -383,6 +421,7 @@ const extractCopy = (artboard, i, width, height) => {
             return
 
         copyList[i].push({
+            key: layer.name.replace("@@", "").split("@@").reverse().join("/"),
             x: layer.frame.x,
             y: layer.frame.y,
             text: getTransformedText(layer.style.textTransform, layer.text),
@@ -401,13 +440,14 @@ const flattenGroup = (group) => {
             }
             switch (layer.type) {
                 case layerType.SYMBOLINSTANCE:
-                    const symbolGroup = layer.detach({ recursively: true })
+                    const symbolGroup = layer.detach({ recursively: false })
                     if (symbolGroup === null) {
                         layer.remove()
                     } else {
                         if (exportSliceOnly && exportCopyByExportState(layer))
                             symbolGroup.layers.forEach((sublayer) => setCopyExportState(sublayer, true))
                         if (exportAtCopyOnly && !exportCopyByNamePrefix(layer)) symbolGroup.remove()
+                        symbolGroup.layers.forEach((sublayer) => (sublayer.name += symbolGroup.name))
                         symbolGroup.sketchObject.ungroup()
                         isFlat = false
                     }
@@ -419,12 +459,79 @@ const flattenGroup = (group) => {
                     isFlat = false
                     break
                 case layerType.TEXT:
+                    if (exportAtCopyOnly && !exportCopyByNamePrefix(layer)) layer.remove()
                     break
                 default:
                     layer.remove()
             }
         })
     } while (!isFlat)
+}
+
+const createIndexMarker = (page) => {
+    const artboard = new sketch.Artboard({ name: indexMarkerName })
+    const size = 24
+    artboard.parent = page
+    artboard.frame.width = size
+    artboard.frame.height = size
+
+    const circle = sketch.ShapePath.fromSVGPath(
+        "M12,24 C18.627417,24 24,18.627417 24,12 C24,5.372583 18.627417,0 12,0 C5.372583,0 0,5.372583 0,12 C0,18.627417 5.372583,24 12,24 Z"
+    )
+    circle.parent = artboard
+    circle.style.fills = [
+        {
+            color: "#ff0000",
+            fillType: sketch.Style.FillType.Color,
+        },
+    ]
+
+    const index = new sketch.Text({
+        text: "0",
+        style: {
+            alignment: sketch.Text.Alignment.center,
+            verticalAlignment: sketch.Text.VerticalAlignment.center,
+            fontSize: 16,
+            lineHeight: size,
+            textColor: "#ffffff",
+            borders: [],
+        },
+        parent: artboard,
+    })
+    index.frame.x = 0
+    index.frame.y = 0
+    index.frame.width = size
+    index.frame.height = size
+
+    return sketch.SymbolMaster.fromArtboard(artboard)
+}
+
+const createCloneWithBorder = (page, sourceArtboard, marker) => {
+    const tempArtboard = new sketch.Artboard()
+    tempArtboard.frame.width = sourceArtboard.frame.width + marker.frame.width * 2
+    tempArtboard.frame.height = sourceArtboard.frame.height + marker.frame.height * 2
+    tempArtboard.parent = page
+
+    const imgShape = new sketch.Shape()
+    imgShape.frame.x = marker.frame.width
+    imgShape.frame.y = marker.frame.width
+    imgShape.frame.width = sourceArtboard.frame.width
+    imgShape.frame.height = sourceArtboard.frame.height
+    imgShape.parent = tempArtboard
+
+    const buffer = sketch.export(sourceArtboard, { scales: 3, formats: "png", output: false })
+    const imgContent = sketch.createLayerFromData(buffer, "bitmap")
+
+    imgShape.style.fills = [
+        {
+            pattern: {
+                patternType: sketch.Style.PatternFillType.Fit,
+                image: imgContent.image,
+            },
+            fillType: sketch.Style.FillType.pattern,
+        },
+    ]
+    return tempArtboard
 }
 
 export const generateExcel = async () => {
@@ -450,23 +557,52 @@ export const generateExcel = async () => {
                 if (err) return
 
                 scale = 1 / parseFloat(value)
+                const symbolPage = sketch.Page.getSymbolsPage(doc) || sketch.Page.createSymbolsPage()
+                symbolPage.parent = doc
+                const indexMarkerList = sketch.find(
+                    `${layerType.SYMBOLMASTER}, [name="${indexMarkerName}"]`,
+                    symbolPage
+                )
+                const indexMarkerMaster =
+                    indexMarkerList.length > 0 ? indexMarkerList[0] : createIndexMarker(sketch.Page.getSymbolsPage(doc))
+                const tempPage = new sketch.Page({ name: "temp" })
+                tempPage.parent = doc
 
-                selectedArtboards.forEach((layer) => {
-                    if (layer.type === layerType.ARTBOARD) {
-                        base64ImgList.push({
-                            img: getImgFromLayer(layer),
-                            width: layer.frame.width,
-                            ratio: layer.frame.height / layer.frame.width,
-                        })
-                        copyList.push([{ key: "Name", text: layer.name }])
+                selectedArtboards.forEach((artboard) => {
+                    if (artboard.type === layerType.ARTBOARD) {
+                        copyList.push([{ key: "Name", text: artboard.name }])
 
-                        const tempArtboard = layer.duplicate()
-                        flattenGroup(tempArtboard)
-                        extractCopy(tempArtboard, copyList.length - 1, layer.frame.width, layer.frame.height)
-                        tempArtboard.remove()
+                        const tempArtboardCopy = artboard.duplicate()
+                        flattenGroup(tempArtboardCopy)
+                        extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
                         copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
+
+                        const tempArtboardIndex = createCloneWithBorder(tempPage, artboard, indexMarkerMaster)
+
+                        if (indexMarkerMaster !== null) {
+                            copyList[copyList.length - 1].forEach((copyInfo, index) => {
+                                if (index === 0) return
+                                const marker = indexMarkerMaster.createNewInstance()
+                                marker.parent = tempArtboardIndex
+                                marker.overrides.forEach((override) => {
+                                    if (override.property == "stringValue") override.value = index
+                                })
+                                marker.frame.x = copyInfo.x + marker.frame.width / 4
+                                marker.frame.y = copyInfo.y + marker.frame.height / 4
+                            })
+                        }
+
+                        base64ImgList.push({
+                            img: getImgFromLayer(tempArtboardIndex),
+                            width: tempArtboardIndex.frame.width,
+                            ratio: tempArtboardIndex.frame.height / tempArtboardIndex.frame.width,
+                        })
+
+                        tempArtboardCopy.remove()
+                        tempArtboardIndex.remove()
                     }
                 })
+                tempPage.remove()
                 if (base64ImgList.length > 0) saveAsExcel(ExcelFilePath)
             }
         )
