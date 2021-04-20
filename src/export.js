@@ -325,7 +325,10 @@ const saveAsExcel = async (ExcelFilePath) => {
     let isNew = true
 
     const data = readExcel(ExcelFilePath)
-    if (data) await workbook.xlsx.load(data)
+    if (data) {
+        UI.message("Reading existing file...")
+        await workbook.xlsx.load(data)
+    }
     if (workbook.creator === creator) {
         isNew = false
     } else workbook = new ExcelJS.Workbook()
@@ -344,6 +347,8 @@ const saveAsExcel = async (ExcelFilePath) => {
     if (isHorizontal) {
         generateHorizontalSheet(workbook, worksheet, sheetName)
     } else generateVerticalSheet(workbook, worksheet, sheetName)
+
+    UI.message("Saving (Large file with multiple sheets takes longer time)...")
 
     const buf = await workbook.xlsx.writeBuffer()
     fs.writeFileSync(ExcelFilePath, buf)
@@ -524,31 +529,22 @@ const createIndexMarker = (page) => {
     return sketch.SymbolMaster.fromArtboard(artboard)
 }
 
-const createCloneWithBorder = (page, sourceArtboard, marker) => {
+const getClonedArtboard = (page, sourceArtboard, marker) => {
     const tempArtboard = new sketch.Artboard()
-    tempArtboard.frame.width = sourceArtboard.frame.width + marker.frame.width * 2
-    tempArtboard.frame.height = sourceArtboard.frame.height + marker.frame.height * 2
+    const widthOffset = marker ? marker.frame.width : 0
+    const heightOffset = marker ? marker.frame.height : 0
+    tempArtboard.frame.width = sourceArtboard.frame.width + widthOffset * 2
+    tempArtboard.frame.height = sourceArtboard.frame.height + heightOffset * 2
     tempArtboard.parent = page
 
-    const imgShape = new sketch.Shape()
-    imgShape.frame.x = marker.frame.width
-    imgShape.frame.y = marker.frame.width
-    imgShape.frame.width = sourceArtboard.frame.width
-    imgShape.frame.height = sourceArtboard.frame.height
-    imgShape.parent = tempArtboard
-
     const buffer = sketch.export(sourceArtboard, { scales: 3, formats: "png", output: false })
-    const imgContent = sketch.createLayerFromData(buffer, "bitmap")
+    const img = sketch.createLayerFromData(buffer, "bitmap")
+    img.frame.x = widthOffset
+    img.frame.y = heightOffset
+    img.frame.width = sourceArtboard.frame.width
+    img.frame.height = sourceArtboard.frame.height
+    img.parent = tempArtboard
 
-    imgShape.style.fills = [
-        {
-            pattern: {
-                patternType: sketch.Style.PatternFillType.Fit,
-                image: imgContent.image,
-            },
-            fillType: sketch.Style.FillType.pattern,
-        },
-    ]
     return tempArtboard
 }
 
@@ -557,7 +553,6 @@ export const generateExcel = async () => {
         sketch.UI.message("❌ Please select at least 1 artboard.")
         return
     }
-
     const selectedArtboards = sortArtboardTBLR(selectedLayers.layers)
 
     const ExcelFilePath = dialog.showSaveDialogSync(doc, { filters: [{ extensions: ["xlsx"] }] })
@@ -576,8 +571,10 @@ export const generateExcel = async () => {
 
                 scale = 1 / parseFloat(value)
 
-                let indexMarkerMaster
-                let tempPage
+                let indexMarkerMaster = undefined
+                const tempPage = new sketch.Page({ name: "temp" })
+                tempPage.parent = doc
+
                 if (hasCopyIndex) {
                     const symbolPage = sketch.Page.getSymbolsPage(doc) || sketch.Page.createSymbolsPage()
                     symbolPage.parent = doc
@@ -589,8 +586,6 @@ export const generateExcel = async () => {
                         indexMarkerList.length > 0
                             ? indexMarkerList[0]
                             : createIndexMarker(sketch.Page.getSymbolsPage(doc))
-                    tempPage = new sketch.Page({ name: "temp" })
-                    tempPage.parent = doc
                 }
 
                 selectedArtboards.forEach((artboard) => {
@@ -598,13 +593,15 @@ export const generateExcel = async () => {
                         copyList.push([{ key: "Name", text: artboard.name }])
 
                         const tempArtboardCopy = artboard.duplicate()
+                        tempArtboardCopy.parent = tempPage
                         flattenGroup(tempArtboardCopy)
                         extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
                         copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
+                        tempArtboardCopy.remove()
 
-                        const tempArtboardImgSource = hasCopyIndex
-                            ? createCloneWithBorder(tempPage, artboard, indexMarkerMaster)
-                            : artboard.duplicate()
+                        // const tempArtboardImgSource = getClonedArtboard(tempPage, artboard, indexMarkerMaster)
+                        const tempArtboardImgSource = artboard.duplicate()
+                        tempArtboardImgSource.parent = tempPage
 
                         if (hasCopyIndex) {
                             copyList[copyList.length - 1].forEach((copyInfo, index) => {
@@ -614,8 +611,8 @@ export const generateExcel = async () => {
                                 marker.overrides.forEach((override) => {
                                     if (override.property == "stringValue") override.value = index
                                 })
-                                marker.frame.x = copyInfo.x + marker.frame.width / 4
-                                marker.frame.y = copyInfo.y + marker.frame.height / 4
+                                marker.frame.x = copyInfo.x - (marker.frame.width / 4) * 3
+                                marker.frame.y = copyInfo.y - (marker.frame.height / 4) * 3
                             })
                         }
 
@@ -624,12 +621,10 @@ export const generateExcel = async () => {
                             width: tempArtboardImgSource.frame.width,
                             ratio: tempArtboardImgSource.frame.height / tempArtboardImgSource.frame.width,
                         })
-
-                        tempArtboardCopy.remove()
                         tempArtboardImgSource.remove()
                     }
                 })
-                if (hasCopyIndex) tempPage.remove()
+                tempPage.remove()
                 if (base64ImgList.length > 0) saveAsExcel(ExcelFilePath)
             }
         )
