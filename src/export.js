@@ -37,6 +37,12 @@ const prefernceKey = {
     HAS_COPY_KEY: "hasCopyKey",
     EXPORT_INVIEW_ONLY: "exportInViewOnly",
 }
+
+const prefix = {
+    COPY: "copy",
+    SYMBOL: "@@symbol",
+}
+
 const charNewLine = String.fromCharCode(10)
 const exportSliceOnly = Settings.settingForKey(prefernceKey.EXPORT_SLICE_ONLY)
 const exportAtCopyOnly = Settings.settingForKey(prefernceKey.EXPORT_AT_COPY_COPY)
@@ -45,7 +51,7 @@ const hasCopyRevision = Settings.settingForKey(prefernceKey.HAS_COPY_REVISION)
 const hasCopyIndex = Settings.settingForKey(prefernceKey.HAS_COPY_INDEX)
 const hasCopyKey = Settings.settingForKey(prefernceKey.HAS_COPY_KEY)
 const exportInViewOnly = Settings.settingForKey(prefernceKey.EXPORT_INVIEW_ONLY)
-const columnCount = 2 + (hasCopyIndex ? 1 : 0) + (hasCopyKey ? 1 : 0) + (hasCopyRevision ? 1 : 0)
+const columnCount = 3 + (hasCopyIndex ? 1 : 0) + (hasCopyKey ? 1 : 0) + (hasCopyRevision ? 1 : 0)
 
 const imgBolder = {
     bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
@@ -53,6 +59,9 @@ const imgBolder = {
     right: { style: "think", color: { argb: "FFFFFFFF" } },
 }
 const copyAlignment = { horizontal: "left", vertical: "middle", wrapText: true, indent: 2 }
+
+const sameJSONCopyLocation = {}
+const sameJSONRevisionLocation = {}
 
 const addFormattingForCopyRevision = (worksheet, ref, formulae) => {
     if (hasCopyRevision) {
@@ -82,12 +91,26 @@ const getColLetterByNumber = (int) => {
     return col
 }
 
-const getCopyContent = (copyItem, index) => {
+const getCopyContent = (copyItem, index, copyColLetter, revisionColLetter, rowIndex) => {
     const copyContent = [null]
     if (hasCopyIndex) copyContent.push(index + 1)
     if (hasCopyKey) copyContent.push(copyItem.key)
-    copyContent.push(copyItem.text)
-    if (hasCopyRevision) copyContent.push(copyItem.text)
+    copyContent.push(copyItem.id)
+    if (copyItem.id) {
+        if (sameJSONCopyLocation[copyItem.id]) {
+            copyContent.push(sameJSONCopyLocation[copyItem.id])
+            if (hasCopyRevision) copyContent.push(sameJSONRevisionLocation[copyItem.id])
+        } else {
+            sameJSONCopyLocation[copyItem.id] = { formula: `${copyColLetter}${rowIndex}` }
+            sameJSONRevisionLocation[copyItem.id] = { formula: `${revisionColLetter}${rowIndex}` }
+            copyContent.push(copyItem.text)
+            if (hasCopyRevision) copyContent.push(copyItem.text)
+        }
+    } else {
+        copyContent.push(copyItem.text)
+        if (hasCopyRevision) copyContent.push(copyItem.text)
+    }
+
     return copyContent
 }
 
@@ -95,6 +118,7 @@ const getColumns = (i, screenName, currentCopyTitle) => {
     const columns = [{ name: `${i + 1}. ${screenName}` }]
     if (hasCopyIndex) columns.push({ name: "Id" })
     if (hasCopyKey) columns.push({ name: "Key" })
+    columns.push({ name: "JSON" })
     columns.push({ name: currentCopyTitle })
     if (hasCopyRevision) columns.push({ name: "Copy Revision" })
     return columns
@@ -214,6 +238,7 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
     const imgCol = worksheet.getColumn(++colIndex)
     const indexCol = hasCopyIndex ? worksheet.getColumn(++colIndex) : null
     const keyCol = hasCopyKey ? worksheet.getColumn(++colIndex) : null
+    const jsonCol = worksheet.getColumn(++colIndex)
     const copyCol = worksheet.getColumn(++colIndex)
     const revisionCol = hasCopyRevision ? worksheet.getColumn(++colIndex) : null
     let currentRow = 1
@@ -224,31 +249,40 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         fitToWidth: 1,
         fitToHeight: base64ImgList.length,
         printArea: "",
+        cellComments: "asDisplayed",
     }
 
     const fontStyle = { size: 14 }
 
     imgCol.width = scaledImgWidth / 8
     imgCol.border = imgBolder
+
     if (hasCopyIndex) {
         indexCol.width = columnWidth / 8
         indexCol.font = fontStyle
         indexCol.alignment = copyAlignment
     }
+
     if (hasCopyKey) {
         keyCol.width = columnWidth / 2
         keyCol.font = fontStyle
         keyCol.alignment = copyAlignment
     }
+    jsonCol.width = columnWidth / 4
+    jsonCol.font = fontStyle
+    jsonCol.alignment = copyAlignment
+
     copyCol.width = columnWidth
     copyCol.font = fontStyle
     copyCol.alignment = copyAlignment
+
+    const copyColLetter = hasCopyRevision ? getColLetterByNumber(columnCount - 1) : getColLetterByNumber(columnCount)
+    const copyRevisionColLetter = getColLetterByNumber(columnCount)
+
     if (hasCopyRevision) {
         revisionCol.width = columnWidth
         revisionCol.font = { size: 14, color: { argb: "FFBBBBBB" } }
         revisionCol.alignment = copyAlignment
-        const copyColLetter = getColLetterByNumber(columnCount - 1)
-        const copyRevisionColLetter = getColLetterByNumber(columnCount)
         addFormattingForCopyRevision(
             worksheet,
             `$${copyRevisionColLetter}:$${copyRevisionColLetter}`,
@@ -268,8 +302,43 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         let minimumRow = currentRow + Math.ceil(scaledImgHeight / heightUnit / 1.25)
 
         copyList[i].slice(1).forEach((copyItem, index) => {
-            copys.push(getCopyContent(copyItem, index))
+            const currentCopyRowIndex = currentRow + index + 1
+            copys.push(getCopyContent(copyItem, index, copyColLetter, copyRevisionColLetter, currentCopyRowIndex))
             minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
+
+            // if (copyItem.id) {
+            //     const pathList = copyItem.path ? copyItem.path.split("/") : undefined
+            //     const copyCell = worksheet.getCell(copyColLetter + currentCopyRowIndex)
+
+            //     if (pathList) {
+            //         copyCell.note = {
+            //             texts: [
+            //                 { font: { size: 12 }, text: "Designer: " },
+            //                 { font: { size: 12 }, text: pathList[2] },
+            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
+            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
+            //                 { font: { size: 12 }, text: "Source File: " },
+            //                 { font: { size: 12 }, text: pathList[pathList.length - 1] },
+            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
+            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
+            //                 { font: { size: 14, underline: "single", bold: true }, text: copyItem.id },
+            //             ],
+            //         }
+            //     } else {
+            //         copyCell.note = {
+            //             texts: [
+            //                 {
+            //                     font: { size: 12 },
+            //                     text: "Source not found",
+            //                 },
+            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
+            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
+            //                 { font: { size: 14, underline: "single", bold: true }, text: copyItem.id },
+            //             ],
+            //         }
+            //     }
+            //     copyCell.note.margins = { insetmode: "custom", inset: [0.125, 0.725, 0.125, 0.725] }
+            // }
         })
 
         let targetRow = minimumRow > currentRow + copys.length ? minimumRow : currentRow + copys.length
@@ -300,9 +369,12 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         imgCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyIndex) indexCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyKey) keyCol.eachCell((cell) => (cell.name = "Print_Area"))
+        jsonCol.eachCell((cell) => (cell.name = "Print_Area"))
         copyCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyRevision) revisionCol.eachCell((cell) => (cell.name = "Print_Area"))
 
+        worksheet.getRow(4).getCell(3).value = "lalalalalalalal"
+        worksheet.getRow(4).getCell(3).note = "hahahahaha"
         currentRow = targetRow + 1
     })
 }
@@ -361,25 +433,24 @@ const getImgFromLayer = (layer) => {
     return base64Img
 }
 
-const exportCopyByNamePrefix = (layer) => {
+const isNamePrefixIncludeAt = (layer) => {
     return layer.name.indexOf("@@") === 0
 }
 
-const exportCopyByExportState = (layer) => {
+const isSlicePrefixInclude = (layer, text) => {
     if (layer.exportFormats.length > 0) {
         let exportable = false
         layer.exportFormats.forEach((slice) => {
-            if (slice.prefix === "copy" || slice.suffix === "copy") exportable = true
+            if (slice.prefix === text || slice.suffix === text) exportable = true
         })
         return exportable
-    } else false
+    } else return false
 }
 
-const setCopyExportState = (layer, state) => {
-    if (state)
-        layer.exportFormats.push({
-            prefix: "copy",
-        })
+const setSlicePrefix = (layer, prefix) => {
+    layer.exportFormats.push({
+        prefix: prefix,
+    })
 }
 
 const getTransformedText = (rule, text) => {
@@ -438,8 +509,8 @@ const extractCopy = (artboard, i, width, height) => {
                     layer.frame.y > height ||
                     layer.frame.x + layer.frame.width < 0 ||
                     layer.frame.y + layer.frame.height < 0)) ||
-            (exportSliceOnly && !exportCopyByExportState(layer)) ||
-            (exportAtCopyOnly && !exportCopyByNamePrefix(layer))
+            (exportSliceOnly && !isSlicePrefixInclude(layer, prefix.COPY)) ||
+            (exportAtCopyOnly && !isNamePrefixIncludeAt(layer))
         )
             return
 
@@ -463,26 +534,34 @@ const flattenGroup = (group) => {
             }
             switch (layer.type) {
                 case layerType.SYMBOLINSTANCE:
+                    layer.overrides.forEach((override, index) => {
+                        // const key = Settings.layerSettingForKey(layer, prefernceKey.KEY)
+                        if (override.property === "stringValue") {
+                            // console.log(index, override.affectedLayer.name, key[index])
+                        }
+                    })
                     const symbolGroup = layer.detach({ recursively: false })
                     if (symbolGroup === null) {
                         layer.remove()
                     } else {
-                        if (exportSliceOnly && exportCopyByExportState(layer))
-                            symbolGroup.layers.forEach((sublayer) => setCopyExportState(sublayer, true))
-                        if (exportAtCopyOnly && !exportCopyByNamePrefix(layer)) symbolGroup.remove()
-                        symbolGroup.layers.forEach((sublayer) => (sublayer.name += symbolGroup.name))
+                        if (exportSliceOnly && isSlicePrefixInclude(layer, prefix.COPY))
+                            symbolGroup.layers.forEach((sublayer) => setSlicePrefix(sublayer, prefix.COPY))
+                        if (exportAtCopyOnly && !isNamePrefixIncludeAt(layer)) symbolGroup.remove()
+                        symbolGroup.layers.forEach((sublayer, index) => {
+                            sublayer.name += symbolGroup.name
+                        })
                         symbolGroup.sketchObject.ungroup()
                         isFlat = false
                     }
                     break
                 case layerType.GROUP:
-                    if (exportSliceOnly && exportCopyByExportState(layer))
-                        layer.layers.forEach((sublayer) => setCopyExportState(sublayer, true))
+                    if (exportSliceOnly && isSlicePrefixInclude(layer, prefix.COPY))
+                        layer.layers.forEach((sublayer) => setSlicePrefix(sublayer, prefix.COPY))
                     layer.sketchObject.ungroup()
                     isFlat = false
                     break
                 case layerType.TEXT:
-                    if (exportAtCopyOnly && !exportCopyByNamePrefix(layer)) layer.remove()
+                    if (exportAtCopyOnly && !isNamePrefixIncludeAt(layer)) layer.remove()
                     break
                 default:
                     layer.remove()
@@ -548,12 +627,123 @@ const getClonedArtboard = (page, sourceArtboard, marker) => {
     return tempArtboard
 }
 
+const exportContent = (layer, i, x, y, width, height) => {
+    if (layer.layers === undefined) {
+        if (
+            (exportSliceOnly && !isSlicePrefixInclude(layer, prefix.COPY)) ||
+            (exportAtCopyOnly && !isNamePrefixIncludeAt(layer))
+        ) {
+            layer.remove()
+            return
+        } else {
+            const storedKey = Settings.layerSettingForKey(layer, prefernceKey.KEY)
+            const JSONPath = Settings.layerSettingForKey(layer, prefernceKey.JSON_PATH)
+
+            switch (layer.type) {
+                case layerType.TEXT:
+                    if (
+                        exportInViewOnly &&
+                        (x + layer.frame.x > width ||
+                            y + layer.frame.y > height ||
+                            x + layer.frame.x + layer.frame.width < 0 ||
+                            y + layer.frame.y + layer.frame.height < 0)
+                    ) {
+                        layer.remove()
+                        return
+                    } else {
+                        copyList[i].push({
+                            path: JSONPath ? JSONPath : undefined,
+                            key: layer.name.replace("@@", ""),
+                            id: storedKey ? storedKey[0] : undefined,
+                            x: x + layer.frame.x,
+                            y: y + layer.frame.y,
+                            text: getTransformedText(layer.style.textTransform, layer.text),
+                        })
+                    }
+                    break
+                case layerType.SYMBOLINSTANCE:
+                    let copies = []
+                    layer.overrides.forEach((override, j) => {
+                        if (override.property == "stringValue") {
+                            copies.push({
+                                path: JSONPath ? JSONPath : undefined,
+                                id: storedKey ? storedKey[j] : undefined,
+                                text: override.value,
+                            })
+                        }
+                    })
+
+                    const detachedGroup = layer.detach({ recursively: true })
+                    let index = copies.length
+                    const reviewOverride = (override, copyPrefix, x, y, isAtCopy) => {
+                        if (override.layers === undefined) {
+                            if (override.type === layerType.TEXT) {
+                                index--
+                                copies[index] = {
+                                    ...copies[index],
+                                    key: copyPrefix + "/" + override.name.replace("@@", ""),
+                                    x: x + override.frame.x,
+                                    y: y + override.frame.y,
+                                    isIncluded: isAtCopy && isNamePrefixIncludeAt(override),
+                                }
+                            } else override.remove()
+                        } else
+                            override.layers.forEach((sublayer) => {
+                                reviewOverride(
+                                    sublayer,
+                                    copyPrefix + "/" + override.name.replace("@@", ""),
+                                    x + override.frame.x,
+                                    y + override.frame.y,
+                                    isAtCopy && isNamePrefixIncludeAt(override)
+                                )
+                            })
+                    }
+                    reviewOverride(detachedGroup, "", x, y, true)
+
+                    if (exportAtCopyOnly) {
+                        const atCopyOnlyList = []
+                        copies.forEach((copy) => {
+                            if (copy.isIncluded) atCopyOnlyList.push(copy)
+                        })
+                        copies = [...atCopyOnlyList]
+                    }
+
+                    copyList[i] = [...copyList[i], ...copies]
+                    break
+                default:
+                    layer.remove()
+            }
+        }
+    } else
+        layer.layers.forEach((sublayer) =>
+            exportContent(sublayer, i, x + layer.frame.x, y + layer.frame.y, width, height)
+        )
+}
+
 export const generateExcel = async () => {
     if (selectedLayers.isEmpty) {
         sketch.UI.message("❌ Please select at least 1 artboard.")
         return
     }
     const selectedArtboards = sortArtboardTBLR(selectedLayers.layers)
+
+    // const tempPage = new sketch.Page({ name: "temp" })
+    // tempPage.parent = doc
+
+    // selectedArtboards.forEach((artboard, index) => {
+    //     if (artboard.type === layerType.ARTBOARD) {
+    //         copyList.push([{ key: "Name", text: artboard.name }])
+
+    //         const tempArtboardCopy = artboard.duplicate()
+    //         tempArtboardCopy.parent = tempPage
+    //         exportContent(tempArtboardCopy, index, artboard.frame.width, artboard.frame.height)
+    //         // flattenGroup(tempArtboardCopy)
+    //         // extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
+    //         // copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
+    //     }
+    // })
+    // console.log(copyList)
+    // return
 
     const ExcelFilePath = dialog.showSaveDialogSync(doc, { filters: [{ extensions: ["xlsx"] }] })
 
@@ -594,14 +784,25 @@ export const generateExcel = async () => {
 
                         const tempArtboardCopy = artboard.duplicate()
                         tempArtboardCopy.parent = tempPage
-                        flattenGroup(tempArtboardCopy)
-                        extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
+                        // flattenGroup(tempArtboardCopy)
+                        // extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
+                        exportContent(
+                            tempArtboardCopy,
+                            copyList.length - 1,
+                            tempArtboardCopy.frame.x * -1,
+                            tempArtboardCopy.frame.y * -1,
+                            tempArtboardCopy.frame.width,
+                            tempArtboardCopy.frame.height
+                        )
                         copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
                         tempArtboardCopy.remove()
-
                         // const tempArtboardImgSource = getClonedArtboard(tempPage, artboard, indexMarkerMaster)
                         const tempArtboardImgSource = artboard.duplicate()
                         tempArtboardImgSource.parent = tempPage
+                        new sketch.Group({
+                            layers: tempArtboardImgSource.layers,
+                            parent: tempArtboardImgSource,
+                        })
 
                         if (hasCopyIndex) {
                             copyList[copyList.length - 1].forEach((copyInfo, index) => {
@@ -625,6 +826,7 @@ export const generateExcel = async () => {
                     }
                 })
                 tempPage.remove()
+                doc.centerOnLayer(indexMarkerMaster)
                 if (base64ImgList.length > 0) saveAsExcel(ExcelFilePath)
             }
         )
