@@ -17,10 +17,11 @@ const prefernceKey = {
     HAS_COPY_REVISION: "hasCopyRevision",
     HAS_COPY_INDEX: "hasCopyIndex",
     HAS_COPY_KEY: "hasCopyKey",
+    HAS_JSON_KEY: "hasJSONKey",
 }
 const panelSpec = {
     width: 300,
-    height: 375,
+    height: 395,
     lineHeight: 25,
 }
 const checkScopeOptions = ["Selected page", 'Pages starting with "@"', "Entire document"]
@@ -35,6 +36,7 @@ let checkCopyToggle,
     copyRevisionToggle,
     copyIndexToggle,
     copyKeyToggle,
+    jsonKeyToggle,
     checkScopeDropdown,
     exportOrientationDropdown
 
@@ -125,6 +127,8 @@ export const createSettingPanel = () => {
     y += 20
     copyKeyToggle = createToggle(y, prefernceKey.HAS_COPY_KEY, "Add a copy name column")
     y += 20
+    jsonKeyToggle = createToggle(y, prefernceKey.HAS_JSON_KEY, "Add a JSON key column")
+    y += 20
     copyRevisionToggle = createToggle(y, prefernceKey.HAS_COPY_REVISION, "Add a copy revision column")
 
     // -------------------------------------------------
@@ -150,6 +154,7 @@ export const createSettingPanel = () => {
     view.addSubview(exportAtCopyOnlyToggle)
     view.addSubview(exportInViewOnlyToggle)
     view.addSubview(copyIndexToggle)
+    view.addSubview(jsonKeyToggle)
     view.addSubview(copyKeyToggle)
     view.addSubview(copyRevisionToggle)
     view.addSubview(exportOrientationLabel)
@@ -171,6 +176,7 @@ export const updateSettings = () => {
     Settings.setSettingForKey(prefernceKey.EXPORT_AT_COPY_ONLY, exportAtCopyOnlyToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_INVIEW_ONLY, exportInViewOnlyToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_COPY_INDEX, copyIndexToggle.state())
+    Settings.setSettingForKey(prefernceKey.HAS_JSON_KEY, jsonKeyToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_COPY_KEY, copyKeyToggle.state())
     Settings.setSettingForKey(prefernceKey.HAS_COPY_REVISION, copyRevisionToggle.state())
     Settings.setSettingForKey(prefernceKey.EXPORT_ORIENTATION, orientation)

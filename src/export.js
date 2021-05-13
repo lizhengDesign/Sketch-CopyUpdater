@@ -35,6 +35,7 @@ const prefernceKey = {
     HAS_COPY_REVISION: "hasCopyRevision",
     HAS_COPY_INDEX: "hasCopyIndex",
     HAS_COPY_KEY: "hasCopyKey",
+    HAS_JSON_KEY: "hasJSONKey",
     EXPORT_INVIEW_ONLY: "exportInViewOnly",
 }
 
@@ -50,16 +51,22 @@ const isHorizontal = Settings.settingForKey(prefernceKey.EXPORT_ORIENTATION) ===
 const hasCopyRevision = Settings.settingForKey(prefernceKey.HAS_COPY_REVISION)
 const hasCopyIndex = Settings.settingForKey(prefernceKey.HAS_COPY_INDEX)
 const hasCopyKey = Settings.settingForKey(prefernceKey.HAS_COPY_KEY)
+const hasJSONKey = Settings.settingForKey(prefernceKey.HAS_JSON_KEY)
 const exportInViewOnly = Settings.settingForKey(prefernceKey.EXPORT_INVIEW_ONLY)
-const columnCount = 3 + (hasCopyIndex ? 1 : 0) + (hasCopyKey ? 1 : 0) + (hasCopyRevision ? 1 : 0)
+const columnCount = 2 + (hasCopyIndex ? 1 : 0) + (hasJSONKey ? 1 : 0) + (hasCopyKey ? 1 : 0) + (hasCopyRevision ? 1 : 0)
 
 const imgBolder = {
     bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
     left: { style: "thin", color: { argb: "FFFFFFFF" } },
     right: { style: "think", color: { argb: "FFFFFFFF" } },
 }
-const copyAlignment = { horizontal: "left", vertical: "middle", wrapText: true, indent: 2 }
 
+const copyAlignmentCenter = { horizontal: "center", vertical: "middle", indent: 0, shrinkToFit: true }
+const copyAlignment = { horizontal: "left", vertical: "middle", wrapText: true, indent: 2 }
+const fontStyle = { size: 14 }
+
+const sameTextKeyLocation = {}
+const sameJSONkeyLocation = {}
 const sameJSONCopyLocation = {}
 const sameJSONRevisionLocation = {}
 
@@ -91,24 +98,79 @@ const getColLetterByNumber = (int) => {
     return col
 }
 
-const getCopyContent = (copyItem, index, copyColLetter, revisionColLetter, rowIndex) => {
+const getCopyContent = (
+    copyItem,
+    index,
+    keyColLetter,
+    jsonColLetter,
+    copyColLetter,
+    revisionColLetter,
+    rowIndex,
+    sheetName
+) => {
     const copyContent = [null]
+    const trimmedText = copyItem.text.replace(/[^\w\s]/gi, "")
+
     if (hasCopyIndex) copyContent.push(index + 1)
-    if (hasCopyKey) copyContent.push(copyItem.key)
-    copyContent.push(copyItem.id)
+    if (hasCopyKey) {
+        if (sameTextKeyLocation[copyItem.id || trimmedText]) {
+            copyContent.push(sameTextKeyLocation[copyItem.id || trimmedText])
+        } else {
+            sameTextKeyLocation[copyItem.id || trimmedText] = {
+                text: copyItem.key,
+                hyperlink: `#\'${sheetName}\'!${keyColLetter}${rowIndex}`,
+                tooltip: "Navigate to the key reference cell",
+            }
+            copyContent.push(copyItem.key)
+        }
+    }
+    if (hasJSONKey) {
+        if (copyItem.id) {
+            if (sameJSONkeyLocation[copyItem.id]) {
+                copyContent.push(sameJSONkeyLocation[copyItem.id])
+            } else {
+                sameJSONkeyLocation[copyItem.id] = {
+                    text: copyItem.id,
+                    hyperlink: `#\'${sheetName}\'!${jsonColLetter}${rowIndex}`,
+                    tooltip: "Navigate to the content reference cell",
+                }
+                copyContent.push(copyItem.id)
+            }
+        } else copyContent.push(null)
+    }
+
     if (copyItem.id) {
         if (sameJSONCopyLocation[copyItem.id]) {
             copyContent.push(sameJSONCopyLocation[copyItem.id])
             if (hasCopyRevision) copyContent.push(sameJSONRevisionLocation[copyItem.id])
         } else {
-            sameJSONCopyLocation[copyItem.id] = { formula: `${copyColLetter}${rowIndex}` }
-            sameJSONRevisionLocation[copyItem.id] = { formula: `${revisionColLetter}${rowIndex}` }
+            sameJSONCopyLocation[copyItem.id] = {
+                formula: `${copyColLetter}${rowIndex}`,
+                result: copyItem.text,
+            }
+            sameJSONRevisionLocation[copyItem.id] = {
+                formula: `${revisionColLetter}${rowIndex}`,
+                result: copyItem.text,
+            }
             copyContent.push(copyItem.text)
             if (hasCopyRevision) copyContent.push(copyItem.text)
         }
     } else {
-        copyContent.push(copyItem.text)
-        if (hasCopyRevision) copyContent.push(copyItem.text)
+        if (sameJSONCopyLocation[trimmedText]) {
+            copyContent.push(sameJSONCopyLocation[trimmedText])
+            if (hasCopyRevision) copyContent.push(sameJSONRevisionLocation[trimmedText])
+        } else {
+            sameJSONCopyLocation[trimmedText] = {
+                formula: `${copyColLetter}${rowIndex}`,
+                result: copyItem.text,
+            }
+            sameJSONRevisionLocation[trimmedText] = {
+                formula: `${revisionColLetter}${rowIndex}`,
+                result: copyItem.text,
+            }
+            copyContent.push(copyItem.text)
+            if (hasCopyRevision) copyContent.push(copyItem.text)
+        }
     }
 
     return copyContent
@@ -118,7 +180,7 @@ const getColumns = (i, screenName, currentCopyTitle) => {
     const columns = [{ name: `${i + 1}. ${screenName}` }]
     if (hasCopyIndex) columns.push({ name: "Id" })
     if (hasCopyKey) columns.push({ name: "Key" })
-    columns.push({ name: "JSON" })
+    if (hasJSONKey) columns.push({ name: "JSON" })
     columns.push({ name: currentCopyTitle })
     if (hasCopyRevision) columns.push({ name: "Copy Revision" })
     return columns
@@ -141,20 +203,36 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCCCCC" } }
 
     base64ImgList.forEach((imgItem, i) => {
-        let copys = []
+        let copies = []
         const scaledImgWidth = imgItem.width / scale
         const screenName = copyList[i][0].text
         const tableName = ["\\", i + 1, "_", screenName.replace(/[^A-Z0-9]+/gi, "_")].join("")
         let colIndex = 0
         const imgCol = worksheet.getColumn(i * vColumnCount + ++colIndex)
         const indexCol = hasCopyIndex ? worksheet.getColumn(i * vColumnCount + ++colIndex) : null
-        const keyCol = hasCopyKey ? worksheet.getColumn(i * vColumnCount + ++colIndex) : null
-        const copyCol = worksheet.getColumn(i * vColumnCount + ++colIndex)
-        const revisionCol = hasCopyRevision ? worksheet.getColumn(i * vColumnCount + ++colIndex) : null
+        const keyColLetter = hasCopyKey ? getColLetterByNumber(i * vColumnCount + ++colIndex) : null
+        const keyCol = hasCopyKey ? worksheet.getColumn(keyColLetter) : null
+        const jsonColLetter = hasJSONKey ? getColLetterByNumber(i * vColumnCount + ++colIndex) : null
+        const jsonCol = hasJSONKey ? worksheet.getColumn(jsonColLetter) : null
+        const copyColLetter = getColLetterByNumber(i * vColumnCount + ++colIndex)
+        const copyCol = worksheet.getColumn(copyColLetter)
+        const revisionColLetter = hasCopyRevision ? getColLetterByNumber(i * vColumnCount + ++colIndex) : null
+        const revisionCol = hasCopyRevision ? worksheet.getColumn(revisionColLetter) : null
         const dividerCol = worksheet.getColumn(i * vColumnCount + ++colIndex)
 
         copyList[i].slice(1).forEach((copyItem, index) => {
-            copys.push(getCopyContent(copyItem, index))
+            copies.push(
+                getCopyContent(
+                    copyItem,
+                    index,
+                    keyColLetter,
+                    jsonColLetter,
+                    copyColLetter,
+                    revisionColLetter,
+                    index + 2,
+                    currentCopyTitle
+                )
+            )
         })
 
         const columns = getColumns(i, screenName, currentCopyTitle)
@@ -164,27 +242,36 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
             ref: getColLetterByNumber(i * vColumnCount + 1) + 1,
             headerRow: true,
             columns: [...columns],
-            rows: [...copys],
+            rows: [...copies],
         })
 
         imgCol.width = scaledImgWidth / 8
         imgCol.border = imgBolder
         if (hasCopyIndex) {
             indexCol.width = 10
-            indexCol.font = { size: 14 }
-            indexCol.alignment = copyAlignment
+            indexCol.font = fontStyle
+            indexCol.alignment = copyAlignmentCenter
         }
+
         if (hasCopyKey) {
             keyCol.width = 30
-            keyCol.font = { size: 14 }
+            keyCol.font = fontStyle
             keyCol.alignment = copyAlignment
         }
+
+        if (hasJSONKey) {
+            jsonCol.width = 30
+            jsonCol.font = fontStyle
+            jsonCol.alignment = copyAlignment
+        }
+
         copyCol.width = 60
-        copyCol.font = { size: 14 }
+        copyCol.font = fontStyle
         copyCol.alignment = copyAlignment
         copyCol.border = {
             right: { style: "think", color: { argb: "FFFFFFFF" } },
         }
+
         if (hasCopyRevision) {
             revisionCol.width = 60
             revisionCol.font = { size: 14, color: { argb: "FFBBBBBB" } }
@@ -192,8 +279,6 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
             revisionCol.border = {
                 right: { style: "think", color: { argb: "FFFFFFFF" } },
             }
-            const copyColLetter = getColLetterByNumber((i + 1) * vColumnCount - 2)
-            const revisionColLetter = getColLetterByNumber((i + 1) * vColumnCount - 1)
             addFormattingForCopyRevision(
                 worksheet,
                 "$" + revisionColLetter + ":$" + revisionColLetter,
@@ -211,12 +296,12 @@ const generateHorizontalSheet = (workbook, worksheet, currentCopyTitle) => {
         })
         worksheet.addImage(image, {
             tl: { col: i * vColumnCount, row: 1 },
-            br: { col: i * vColumnCount + 1, row: scaledImgHeight / rowHeight / 1.25 },
+            br: { col: i * vColumnCount + 1, row: scaledImgHeight / rowHeight / 1.2 },
         })
     })
 
     headerRow.font = { bold: true, size: 20 }
-    headerRow.alignment = { vertical: "middle" }
+    headerRow.alignment = copyAlignment
 }
 
 const getRowCount = (text, colWidth) => {
@@ -238,7 +323,7 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
     const imgCol = worksheet.getColumn(++colIndex)
     const indexCol = hasCopyIndex ? worksheet.getColumn(++colIndex) : null
     const keyCol = hasCopyKey ? worksheet.getColumn(++colIndex) : null
-    const jsonCol = worksheet.getColumn(++colIndex)
+    const jsonCol = hasJSONKey ? worksheet.getColumn(++colIndex) : null
     const copyCol = worksheet.getColumn(++colIndex)
     const revisionCol = hasCopyRevision ? worksheet.getColumn(++colIndex) : null
     let currentRow = 1
@@ -252,35 +337,42 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         cellComments: "asDisplayed",
     }
 
-    const fontStyle = { size: 14 }
+    worksheet.views = [{ state: "frozen", xSplit: hasCopyIndex ? 2 : 1 }]
 
     imgCol.width = scaledImgWidth / 8
     imgCol.border = imgBolder
 
     if (hasCopyIndex) {
-        indexCol.width = columnWidth / 8
+        indexCol.width = columnWidth / 12
         indexCol.font = fontStyle
-        indexCol.alignment = copyAlignment
+        indexCol.alignment = copyAlignmentCenter
     }
 
     if (hasCopyKey) {
-        keyCol.width = columnWidth / 2
+        keyCol.width = (columnWidth / 8) * 3
         keyCol.font = fontStyle
         keyCol.alignment = copyAlignment
     }
-    jsonCol.width = columnWidth / 4
-    jsonCol.font = fontStyle
-    jsonCol.alignment = copyAlignment
 
-    copyCol.width = columnWidth
+    if (hasJSONKey) {
+        jsonCol.width = (columnWidth / 8) * 3
+        jsonCol.font = fontStyle
+        jsonCol.alignment = copyAlignment
+    }
+
+    copyCol.width = (columnWidth / 8) * 6
     copyCol.font = fontStyle
     copyCol.alignment = copyAlignment
 
+    const keyColLetter = hasCopyIndex ? getColLetterByNumber(3) : getColLetterByNumber(2)
+    const jsonColLetter = hasCopyRevision
+        ? getColLetterByNumber(columnCount - 2)
+        : getColLetterByNumber(columnCount - 1)
     const copyColLetter = hasCopyRevision ? getColLetterByNumber(columnCount - 1) : getColLetterByNumber(columnCount)
     const copyRevisionColLetter = getColLetterByNumber(columnCount)
 
     if (hasCopyRevision) {
-        revisionCol.width = columnWidth
+        revisionCol.width = (columnWidth / 8) * 6
         revisionCol.font = { size: 14, color: { argb: "FFBBBBBB" } }
         revisionCol.alignment = copyAlignment
         addFormattingForCopyRevision(
@@ -293,7 +385,7 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
     base64ImgList.forEach((imgItem, i) => {
         const screenName = copyList[i][0].text
         const tableName = ["\\", i + 1, "_", screenName.replace(/[^A-Z0-9]+/gi, "_")].join("")
-        let copys = []
+        let copies = []
         const scaledImgHeight = scaledImgWidth * imgItem.ratio
         const headerRow = worksheet.getRow(currentRow)
         headerRow.font = { bold: true, size: 20 }
@@ -303,50 +395,27 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
 
         copyList[i].slice(1).forEach((copyItem, index) => {
             const currentCopyRowIndex = currentRow + index + 1
-            copys.push(getCopyContent(copyItem, index, copyColLetter, copyRevisionColLetter, currentCopyRowIndex))
+            copies.push(
+                getCopyContent(
+                    copyItem,
+                    index,
+                    keyColLetter,
+                    jsonColLetter,
+                    copyColLetter,
+                    copyRevisionColLetter,
+                    currentCopyRowIndex,
+                    currentCopyTitle
+                )
+            )
             minimumRow -= getRowCount(copyItem.text, columnWidth) - 1
-
-            // if (copyItem.id) {
-            //     const pathList = copyItem.path ? copyItem.path.split("/") : undefined
-            //     const copyCell = worksheet.getCell(copyColLetter + currentCopyRowIndex)
-
-            //     if (pathList) {
-            //         copyCell.note = {
-            //             texts: [
-            //                 { font: { size: 12 }, text: "Designer: " },
-            //                 { font: { size: 12 }, text: pathList[2] },
-            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
-            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
-            //                 { font: { size: 12 }, text: "Source File: " },
-            //                 { font: { size: 12 }, text: pathList[pathList.length - 1] },
-            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
-            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
-            //                 { font: { size: 14, underline: "single", bold: true }, text: copyItem.id },
-            //             ],
-            //         }
-            //     } else {
-            //         copyCell.note = {
-            //             texts: [
-            //                 {
-            //                     font: { size: 12 },
-            //                     text: "Source not found",
-            //                 },
-            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
-            //                 { font: { size: 14 }, text: String.fromCharCode(10) },
-            //                 { font: { size: 14, underline: "single", bold: true }, text: copyItem.id },
-            //             ],
-            //         }
-            //     }
-            //     copyCell.note.margins = { insetmode: "custom", inset: [0.125, 0.725, 0.125, 0.725] }
-            // }
         })
 
-        let targetRow = minimumRow > currentRow + copys.length ? minimumRow : currentRow + copys.length
+        let targetRow = minimumRow > currentRow + copies.length ? minimumRow : currentRow + copies.length
         const additonalRows =
-            targetRow - currentRow - copys.length - 2 > 0 ? targetRow - currentRow - copys.length - 2 : 0
+            targetRow - currentRow - copies.length - 2 > 0 ? targetRow - currentRow - copies.length - 2 : 0
         targetRow = additonalRows === 0 ? targetRow + 1 : targetRow
 
-        copys = copys.concat(new Array(additonalRows).fill(new Array(columnCount).fill("")))
+        copies = copies.concat(new Array(additonalRows).fill(new Array(columnCount).fill("")))
         const columns = getColumns(i, screenName, currentCopyTitle)
 
         worksheet.addTable({
@@ -354,7 +423,7 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
             ref: "A" + currentRow,
             headerRow: true,
             columns: [...columns],
-            rows: [...copys],
+            rows: [...copies],
         })
 
         const image = workbook.addImage({
@@ -369,12 +438,10 @@ const generateVerticalSheet = (workbook, worksheet, currentCopyTitle) => {
         imgCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyIndex) indexCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyKey) keyCol.eachCell((cell) => (cell.name = "Print_Area"))
-        jsonCol.eachCell((cell) => (cell.name = "Print_Area"))
+        if (hasJSONKey) jsonCol.eachCell((cell) => (cell.name = "Print_Area"))
         copyCol.eachCell((cell) => (cell.name = "Print_Area"))
         if (hasCopyRevision) revisionCol.eachCell((cell) => (cell.name = "Print_Area"))
 
-        worksheet.getRow(4).getCell(3).value = "lalalalalalalal"
-        worksheet.getRow(4).getCell(3).note = "hahahahaha"
         currentRow = targetRow + 1
     })
 }
@@ -392,7 +459,7 @@ const saveAsExcel = async (ExcelFilePath) => {
     const date = new Date()
     const sheetName = `${date.getFullYear()}-${
         date.getMonth() + 1
-    }-${date.getDate()} (${date.getHours()}-${date.getMinutes()}-${date.getSeconds()})`
+    }-${date.getDate()} (${date.getHours()}.${date.getMinutes()}.${date.getSeconds()})`
     let workbook = new ExcelJS.Workbook()
     let isNew = true
 
@@ -597,6 +664,7 @@ const createIndexMarker = (page) => {
             lineHeight: size,
             textColor: "#ffffff",
             borders: [],
+            fontWeight: 12,
         },
         parent: artboard,
     })
@@ -631,7 +699,8 @@ const exportContent = (layer, i, x, y, width, height) => {
     if (layer.layers === undefined) {
         if (
             (exportSliceOnly && !isSlicePrefixInclude(layer, prefix.COPY)) ||
-            (exportAtCopyOnly && !isNamePrefixIncludeAt(layer))
+            (exportAtCopyOnly && !isNamePrefixIncludeAt(layer)) ||
+            layer.hidden
         ) {
             layer.remove()
             return
@@ -643,10 +712,7 @@ const exportContent = (layer, i, x, y, width, height) => {
                 case layerType.TEXT:
                     if (
                         exportInViewOnly &&
-                        (x + layer.frame.x > width ||
-                            y + layer.frame.y > height ||
-                            x + layer.frame.x + layer.frame.width < 0 ||
-                            y + layer.frame.y + layer.frame.height < 0)
+                        (x > width || y > height || x + layer.frame.width < 0 || y + layer.frame.height < 0)
                     ) {
                         layer.remove()
                         return
@@ -655,36 +721,50 @@ const exportContent = (layer, i, x, y, width, height) => {
                             path: JSONPath ? JSONPath : undefined,
                             key: layer.name.replace("@@", ""),
                             id: storedKey ? storedKey[0] : undefined,
-                            x: x + layer.frame.x,
-                            y: y + layer.frame.y,
+                            x: x,
+                            y: y,
                             text: getTransformedText(layer.style.textTransform, layer.text),
                         })
                     }
                     break
                 case layerType.SYMBOLINSTANCE:
                     let copies = []
+                    let hiddenInfo = {}
+
+                    const isParrentHidden = (path) => {
+                        if (!path || path === "") {
+                            return false
+                        } else if (hiddenInfo[path]) {
+                            return true
+                        } else return isParrentHidden(path.substring(0, path.lastIndexOf("/")))
+                    }
+
                     layer.overrides.forEach((override, j) => {
-                        if (override.property == "stringValue") {
-                            copies.push({
-                                path: JSONPath ? JSONPath : undefined,
-                                id: storedKey ? storedKey[j] : undefined,
-                                text: override.value,
-                            })
+                        hiddenInfo[override.path] = override.affectedLayer.hidden
+                        if (!override.affectedLayer.hidden && override.property === "stringValue") {
+                            const isParentHidden = isParrentHidden(override.path)
+                            if (!isParrentHidden(override.path))
+                                copies.push({
+                                    path: JSONPath ? JSONPath : undefined,
+                                    id: storedKey ? storedKey[j] : undefined,
+                                    text: override.value,
+                                })
                         }
                     })
 
                     const detachedGroup = layer.detach({ recursively: true })
                     let index = copies.length
-                    const reviewOverride = (override, copyPrefix, x, y, isAtCopy) => {
+                    const reviewOverride = (override, copyPrefix, x, y, isAtCopy, isHidden) => {
                         if (override.layers === undefined) {
                             if (override.type === layerType.TEXT) {
                                 index--
                                 copies[index] = {
                                     ...copies[index],
                                     key: copyPrefix + "/" + override.name.replace("@@", ""),
-                                    x: x + override.frame.x,
-                                    y: y + override.frame.y,
+                                    x: x,
+                                    y: y,
                                     isIncluded: isAtCopy && isNamePrefixIncludeAt(override),
+                                    hidden: isHidden,
                                 }
                             } else override.remove()
                         } else
@@ -692,18 +772,19 @@ const exportContent = (layer, i, x, y, width, height) => {
                                 reviewOverride(
                                     sublayer,
                                     copyPrefix + "/" + override.name.replace("@@", ""),
-                                    x + override.frame.x,
-                                    y + override.frame.y,
-                                    isAtCopy && isNamePrefixIncludeAt(override)
+                                    x + sublayer.frame.x,
+                                    y + sublayer.frame.y,
+                                    isAtCopy && isNamePrefixIncludeAt(override),
+                                    isHidden || sublayer.hidden
                                 )
                             })
                     }
-                    reviewOverride(detachedGroup, "", x, y, true)
+                    reviewOverride(detachedGroup, "", x, y, true, detachedGroup.hidden)
 
                     if (exportAtCopyOnly) {
                         const atCopyOnlyList = []
                         copies.forEach((copy) => {
-                            if (copy.isIncluded) atCopyOnlyList.push(copy)
+                            if (copy.isIncluded && !copy.hidden) atCopyOnlyList.push(copy)
                         })
                         copies = [...atCopyOnlyList]
                     }
@@ -715,9 +796,11 @@ const exportContent = (layer, i, x, y, width, height) => {
             }
         }
     } else
-        layer.layers.forEach((sublayer) =>
-            exportContent(sublayer, i, x + layer.frame.x, y + layer.frame.y, width, height)
-        )
+        layer.layers.forEach((sublayer) => {
+            if (sublayer.hidden) {
+                sublayer.remove()
+            } else exportContent(sublayer, i, x + sublayer.frame.x, y + sublayer.frame.y, width, height)
+        })
 }
 
 export const generateExcel = async () => {
@@ -726,24 +809,6 @@ export const generateExcel = async () => {
         return
     }
     const selectedArtboards = sortArtboardTBLR(selectedLayers.layers)
-
-    // const tempPage = new sketch.Page({ name: "temp" })
-    // tempPage.parent = doc
-
-    // selectedArtboards.forEach((artboard, index) => {
-    //     if (artboard.type === layerType.ARTBOARD) {
-    //         copyList.push([{ key: "Name", text: artboard.name }])
-
-    //         const tempArtboardCopy = artboard.duplicate()
-    //         tempArtboardCopy.parent = tempPage
-    //         exportContent(tempArtboardCopy, index, artboard.frame.width, artboard.frame.height)
-    //         // flattenGroup(tempArtboardCopy)
-    //         // extractCopy(tempArtboardCopy, copyList.length - 1, artboard.frame.width, artboard.frame.height)
-    //         // copyList[copyList.length - 1] = sortCopyTBLR(copyList[copyList.length - 1])
-    //     }
-    // })
-    // console.log(copyList)
-    // return
 
     const ExcelFilePath = dialog.showSaveDialogSync(doc, { filters: [{ extensions: ["xlsx"] }] })
 
@@ -789,8 +854,8 @@ export const generateExcel = async () => {
                         exportContent(
                             tempArtboardCopy,
                             copyList.length - 1,
-                            tempArtboardCopy.frame.x * -1,
-                            tempArtboardCopy.frame.y * -1,
+                            0,
+                            0,
                             tempArtboardCopy.frame.width,
                             tempArtboardCopy.frame.height
                         )
