@@ -482,7 +482,6 @@ const saveAsExcel = async (ExcelFilePath) => {
         workbook.definedNames.getMatrix("Print_Area").sheets = {}
         workbook.eachSheet((sheet) => (sheet.orderNo = sheet === worksheet ? 0 : sheet.orderNo + 1))
     }
-
     if (isHorizontal) {
         generateHorizontalSheet(workbook, worksheet, sheetName)
     } else generateVerticalSheet(workbook, worksheet, sheetName)
@@ -743,7 +742,7 @@ const exportContent = (layer, i, x, y, width, height) => {
                         hiddenInfo[override.path] = override.affectedLayer.hidden
                         if (!override.affectedLayer.hidden && override.property === "stringValue") {
                             const isParentHidden = isParrentHidden(override.path)
-                            if (!isParrentHidden(override.path))
+                            if (!isParentHidden)
                                 copies.push({
                                     path: JSONPath ? JSONPath : undefined,
                                     id: storedKey ? storedKey[j] : undefined,
@@ -752,41 +751,54 @@ const exportContent = (layer, i, x, y, width, height) => {
                         }
                     })
 
-                    const detachedGroup = layer.detach({ recursively: true })
                     let index = copies.length
-                    const reviewOverride = (override, copyPrefix, x, y, isAtCopy, isHidden) => {
-                        if (override.layers === undefined) {
-                            if (override.type === layerType.TEXT) {
+                    const reviewOverride = (override, copyPrefix, x, y, isAtCopy, isCopySlice, isHidden) => {
+                        if (isHidden) {
+                            override.remove()
+                            return
+                        }
+                        const detachedGroup =
+                            override.type === layerType.SYMBOLINSTANCE
+                                ? override.detach({ recursively: false })
+                                : override
+
+                        if (detachedGroup.layers === undefined) {
+                            if (detachedGroup.type === layerType.TEXT) {
                                 index--
                                 copies[index] = {
                                     ...copies[index],
-                                    key: copyPrefix + "/" + override.name.replace("@@", ""),
+                                    key: copyPrefix + "/" + detachedGroup.name.replace("@@", ""),
                                     x: x,
                                     y: y,
-                                    isIncluded: isAtCopy && isNamePrefixIncludeAt(override),
+                                    isIncluded: exportAtCopyOnly
+                                        ? isAtCopy && isNamePrefixIncludeAt(detachedGroup)
+                                        : exportSliceOnly
+                                        ? isCopySlice && isSlicePrefixInclude(detachedGroup, prefix.COPY)
+                                        : false,
                                     hidden: isHidden,
                                 }
-                            } else override.remove()
+                            } else detachedGroup.remove()
                         } else
-                            override.layers.forEach((sublayer) => {
+                            detachedGroup.layers.forEach((sublayer) => {
                                 reviewOverride(
                                     sublayer,
-                                    copyPrefix + "/" + override.name.replace("@@", ""),
+                                    copyPrefix + "/" + detachedGroup.name.replace("@@", ""),
                                     x + sublayer.frame.x,
                                     y + sublayer.frame.y,
-                                    isAtCopy && isNamePrefixIncludeAt(override),
+                                    isAtCopy && isNamePrefixIncludeAt(detachedGroup),
+                                    isCopySlice && isSlicePrefixInclude(detachedGroup, prefix.COPY),
                                     isHidden || sublayer.hidden
                                 )
                             })
                     }
-                    reviewOverride(detachedGroup, "", x, y, true, detachedGroup.hidden)
+                    reviewOverride(layer, "", x, y, true, true, layer.hidden)
 
-                    if (exportAtCopyOnly) {
-                        const atCopyOnlyList = []
+                    if (exportAtCopyOnly || exportSliceOnly) {
+                        const copyListWithScope = []
                         copies.forEach((copy) => {
-                            if (copy.isIncluded && !copy.hidden) atCopyOnlyList.push(copy)
+                            if (copy.isIncluded && !copy.hidden) copyListWithScope.push(copy)
                         })
-                        copies = [...atCopyOnlyList]
+                        copies = [...copyListWithScope]
                     }
 
                     copyList[i] = [...copyList[i], ...copies]
@@ -891,7 +903,7 @@ export const generateExcel = async () => {
                     }
                 })
                 tempPage.remove()
-                doc.centerOnLayer(indexMarkerMaster)
+                if (indexMarkerMaster) doc.centerOnLayer(indexMarkerMaster)
                 if (base64ImgList.length > 0) saveAsExcel(ExcelFilePath)
             }
         )
