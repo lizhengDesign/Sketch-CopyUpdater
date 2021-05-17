@@ -112,20 +112,16 @@ export const createSettingPanel = () => {
     exportSliceOnlyToggle = createToggle(
         y,
         prefernceKey.EXPORT_SLICE_ONLY,
-        "Only export slices with 'copy' as Prefix or Suffix"
+        "Export slices with 'copy' as Prefix or Suffix"
     )
     y += 20
-    exportAtCopyOnlyToggle = createToggle(
-        y,
-        prefernceKey.EXPORT_AT_COPY_ONLY,
-        "Only export layers with '@@' as name prefix"
-    )
+    exportAtCopyOnlyToggle = createToggle(y, prefernceKey.EXPORT_AT_COPY_ONLY, "Export layers with '@@' as name prefix")
     y += 20
     exportInViewOnlyToggle = createToggle(y, prefernceKey.EXPORT_INVIEW_ONLY, "Ignore content outside of artboards")
     y += 20
     copyIndexToggle = createToggle(y, prefernceKey.HAS_COPY_INDEX, "Add markers on the screen and an index column")
     y += 20
-    copyKeyToggle = createToggle(y, prefernceKey.HAS_COPY_KEY, "Add a copy name column")
+    copyKeyToggle = createToggle(y, prefernceKey.HAS_COPY_KEY, "Add a layer name column")
     y += 20
     jsonKeyToggle = createToggle(y, prefernceKey.HAS_JSON_KEY, "Add a JSON key column")
     y += 20

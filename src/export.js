@@ -179,7 +179,7 @@ const getCopyContent = (
 const getColumns = (i, screenName, currentCopyTitle) => {
     const columns = [{ name: `${i + 1}. ${screenName}` }]
     if (hasCopyIndex) columns.push({ name: "Id" })
-    if (hasCopyKey) columns.push({ name: "Key" })
+    if (hasCopyKey) columns.push({ name: "Name" })
     if (hasJSONKey) columns.push({ name: "JSON" })
     columns.push({ name: currentCopyTitle })
     if (hasCopyRevision) columns.push({ name: "Copy Revision" })
@@ -753,10 +753,11 @@ const exportContent = (layer, i, x, y, width, height) => {
 
                     let index = copies.length
                     const reviewOverride = (override, copyPrefix, x, y, isAtCopy, isCopySlice, isHidden) => {
-                        if (isHidden) {
-                            override.remove()
-                            return
-                        }
+                        // console.log(override.name, y)
+                        // if (isHidden) {
+                        //     override.remove()
+                        //     return
+                        // }
                         const detachedGroup =
                             override.type === layerType.SYMBOLINSTANCE
                                 ? override.detach({ recursively: false })
@@ -767,7 +768,7 @@ const exportContent = (layer, i, x, y, width, height) => {
                                 index--
                                 copies[index] = {
                                     ...copies[index],
-                                    key: copyPrefix + "/" + detachedGroup.name.replace("@@", ""),
+                                    key: copyPrefix,
                                     x: x,
                                     y: y,
                                     isIncluded: exportAtCopyOnly
@@ -778,11 +779,15 @@ const exportContent = (layer, i, x, y, width, height) => {
                                     hidden: isHidden,
                                 }
                             } else detachedGroup.remove()
-                        } else
+                        } else {
+                            detachedGroup.layers.forEach((sublayer) => {
+                                if (sublayer.hidden) sublayer.remove()
+                            })
+                            detachedGroup.adjustToFit()
                             detachedGroup.layers.forEach((sublayer) => {
                                 reviewOverride(
                                     sublayer,
-                                    copyPrefix + "/" + detachedGroup.name.replace("@@", ""),
+                                    copyPrefix + " / " + sublayer.name.replace("@@", "").trim(),
                                     x + sublayer.frame.x,
                                     y + sublayer.frame.y,
                                     isAtCopy && isNamePrefixIncludeAt(detachedGroup),
@@ -790,8 +795,9 @@ const exportContent = (layer, i, x, y, width, height) => {
                                     isHidden || sublayer.hidden
                                 )
                             })
+                        }
                     }
-                    reviewOverride(layer, "", x, y, true, true, layer.hidden)
+                    reviewOverride(layer, layer.name.replace("@@", "").trim(), x, y, true, true, layer.hidden)
 
                     if (exportAtCopyOnly || exportSliceOnly) {
                         const copyListWithScope = []
@@ -838,12 +844,14 @@ export const generateExcel = async () => {
 
                 scale = 1 / parseFloat(value)
 
+                let symbolPage = undefined
                 let indexMarkerMaster = undefined
+                let selectedPage = doc.selectedPage
                 const tempPage = new sketch.Page({ name: "temp" })
                 tempPage.parent = doc
 
                 if (hasCopyIndex) {
-                    const symbolPage = sketch.Page.getSymbolsPage(doc) || sketch.Page.createSymbolsPage()
+                    symbolPage = sketch.Page.getSymbolsPage(doc) || sketch.Page.createSymbolsPage()
                     symbolPage.parent = doc
                     const indexMarkerList = sketch.find(
                         `${layerType.SYMBOLMASTER}, [name="${indexMarkerName}"]`,
@@ -902,8 +910,12 @@ export const generateExcel = async () => {
                         tempArtboardImgSource.remove()
                     }
                 })
+
                 tempPage.remove()
-                if (indexMarkerMaster) doc.centerOnLayer(indexMarkerMaster)
+                if (hasCopyIndex) {
+                    symbolPage.selected = true
+                    doc.centerOnLayer(indexMarkerMaster)
+                } else selectedPage.selected = true
                 if (base64ImgList.length > 0) saveAsExcel(ExcelFilePath)
             }
         )
